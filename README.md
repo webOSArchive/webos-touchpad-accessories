@@ -23,6 +23,22 @@ kernel consumes non-keyboard input, and nothing auto-mounts a disk.
 | Bluetooth gamepad | — | **works, fully** | real evdev gamepad node via `bluetooth-shim/` — all buttons, sticks, analog triggers |
 | Bluetooth LE anything | — | no | 2011 stack predates BLE |
 
+## Apps
+
+Two installable packages come out of this work, both distributed through the
+**WOSA Modernize** Preware feed. Built `.ipk`s live in [`ipks/`](ipks/); install
+via **Preware or WebOS Quick Install** (not `palm-install` — the postinst must
+run as root), then reboot.
+
+| App | Folder | Package | What it does |
+|---|---|---|---|
+| **Bluetooth Gamepad** | [`bluetooth-shim/`](bluetooth-shim/) | `org.webosarchive.btgamepad` | Pairs a DualShock 4 (and other classic BR/EDR HID pads) as a real gamepad — both sticks, analog triggers, d-pad, all buttons — by interposing the stock (unfinished) Bluetooth HID path. Pair from the **Other** category and it auto-connects. |
+| **USB Settings** | [`usb-settings/`](usb-settings/) | `com.webosarchive.usbsettings` | A Palm-style settings app to toggle the USB tricks the OS hides: **USB Host (OTG)** mode, the **high-power** device budget bypass (for a DS4 over USB), and **USB storage** mount/unmount. |
+
+Both do privileged work a jailed webOS app can't do directly, via a small root
+component installed by the package's postinst (an `LD_PRELOAD` shim into
+PmBtEngine for the gamepad; a control-file→root-daemon bridge for USB Settings).
+
 ## Tested hardware
 
 The table above is about *capability*; this is the list of **specific devices we
