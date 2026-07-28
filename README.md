@@ -70,8 +70,11 @@ have actually run**. Everything else is expected-but-unverified.
 
 | Device | VID:PID | Status | Notes |
 |---|---|---|---|
-| Sony DualShock 4 | `054c:05c4` | ✅ | Full function; needs a `bConfigurationValue` override (declares 500 mA) |
-| Logitech Precision Gamepad | `046d:c21a` | ✅ | 8 buttons, d-pad as `ABS_X/Y`; use `gamepad-keys` to reach webOS apps |
+| Sony DualShock 4 | `054c:05c4` | ✅ | Full function; needs the high-power override (declares 500 mA); d-pad on the hat, triggers on `ABS_RX/RY`; plays Clone Keen ≥1.6.0 |
+| Logitech Precision Gamepad | `046d:c21a` | ✅ | 8 buttons, d-pad as `ABS_X/Y`; plays Clone Keen ≥1.6.0 directly, or use `gamepad-keys` to reach the webOS UI |
+| DragonRise "Saturn-style" wireless pad | `0079:0011` | ✅ | Wireless via USB dongle; d-pad on `ABS_RX/RY`, 10 buttons; needs high-power — reports an *empty* `bConfigurationValue` when rejected (USB Settings ≥1.0.8); plays Clone Keen ≥1.6.0 |
+| Knock-off "Xbox" wireless pad | — | ✅ | Wireless via USB dongle; enumerates as **standard HID** (not true XInput), so it just works; plays Clone Keen ≥1.6.0 |
+| Genuine XInput controller (Xbox 360/One) | — | ❌ | Microsoft XInput protocol (USB interface class `0xFF`) needs the `xpad` driver, absent from this kernel. Only *HID*-mode pads work — many "Xbox" knock-offs are HID and do |
 | Logitech Optical Mouse | `046d:c077` | ✅ | evdev only — webOS has no cursor |
 | Apple Extended USB Keyboard | — | ✅ | Through its internal 3-port hub; types into the UI |
 | Kingston DataTraveler 101 G2 | — | ✅ | USB mass storage, VFAT read/write |
