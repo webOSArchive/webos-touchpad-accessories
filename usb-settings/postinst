@@ -23,22 +23,25 @@ done
 
 echo "usbsettings: installing device components from $APP_DIR ..."
 
+# --- install our self-contained JS service launcher ----------------------------
+# We ship our own wrapper (a thin shim over stock node + bootstrap-node.js) so the
+# package does NOT depend on an external JS-service-framework feed package. Every
+# path it references is present on a bare webOS 3.0.5 device.
+cp "$APP_DIR/usbctl-jsservice.sh" /usr/bin/usbctl-jsservice
+chmod 755 /usr/bin/usbctl-jsservice
+
 # --- register the JS bridge service with ls-hubd (homebrew JS service) ---------
 # The proper app installer normally does this, but doing it here makes the
 # package work under any install method. Needs a reboot to take effect
 # (ls-hubd caches its role map at startup).
-if [ -x /var/usr/bin/run-homebrew-js-service ]; then
-    ROLE='{"role":{"exeName":"js","type":"regular","allowedNames":["'"$SVCID"'"]},"permissions":[{"service":"'"$SVCID"'","inbound":["*"],"outbound":["*"]}]}'
-    for bus in pub prv; do
-        mkdir -p /var/palm/ls2/roles/$bus /var/palm/ls2/services/$bus
-        echo "$ROLE" > /var/palm/ls2/roles/$bus/$SVCID.json
-        printf '[D-BUS Service]\nName=%s\nExec=/var/usr/bin/run-homebrew-js-service %s\n' \
-            "$SVCID" "$SVC_DIR" > /var/palm/ls2/services/$bus/$SVCID.service
-    done
-    echo "  registered JS service (reboot required to activate)"
-else
-    echo "  WARNING: /var/usr/bin/run-homebrew-js-service missing -- JS service will not run"
-fi
+ROLE='{"role":{"exeName":"js","type":"regular","allowedNames":["'"$SVCID"'"]},"permissions":[{"service":"'"$SVCID"'","inbound":["*"],"outbound":["*"]}]}'
+for bus in pub prv; do
+    mkdir -p /var/palm/ls2/roles/$bus /var/palm/ls2/services/$bus
+    echo "$ROLE" > /var/palm/ls2/roles/$bus/$SVCID.json
+    printf '[D-BUS Service]\nName=%s\nExec=/usr/bin/usbctl-jsservice %s\n' \
+        "$SVCID" "$SVC_DIR" > /var/palm/ls2/services/$bus/$SVCID.service
+done
+echo "  registered JS service (reboot required to activate)"
 
 cp "$APP_DIR/usbctl-watchd.sh" /usr/bin/usbctl-watchd
 chmod 755 /usr/bin/usbctl-watchd

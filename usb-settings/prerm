@@ -10,6 +10,7 @@ SVCID=com.webosarchive.usbsettings.service
 
 stop usbctl-watchd 2>/dev/null && echo "  stopped usbctl-watchd" || true
 rm -f /usr/bin/usbctl-watchd
+rm -f /usr/bin/usbctl-jsservice
 rm -f /etc/event.d/usbctl-watchd
 rm -f /media/internal/.usbctl-control /media/internal/.usbctl-status /media/internal/.usbctl-state
 

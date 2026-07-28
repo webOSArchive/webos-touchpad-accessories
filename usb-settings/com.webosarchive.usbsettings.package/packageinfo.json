@@ -2,7 +2,7 @@
     "id": "com.webosarchive.usbsettings",
     "package_format_version": 2,
     "loc_name": "USB Settings",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "icon": "icon.png",
     "miniicon": "icon.png",
     "vendor": "webOS Archive",
