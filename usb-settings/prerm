@@ -8,6 +8,11 @@ echo "usbsettings: removing device components..."
 
 SVCID=com.webosarchive.usbsettings.service
 
+# The daemon, launcher, and upstart job live on the root fs, which is mounted
+# read-only on a stock device -- make it writable so we can remove them, then
+# restore read-only at the end.
+mount -o remount,rw / 2>/dev/null || true
+
 stop usbctl-watchd 2>/dev/null && echo "  stopped usbctl-watchd" || true
 rm -f /usr/bin/usbctl-watchd
 rm -f /usr/bin/usbctl-jsservice
@@ -19,6 +24,9 @@ for bus in pub prv; do
     rm -f /var/palm/ls2/roles/$bus/$SVCID.json
     rm -f /var/palm/ls2/services/$bus/$SVCID.service
 done
+
+# restore the stock read-only root
+mount -o remount,ro / 2>/dev/null || true
 
 echo "usbsettings: removal complete."
 exit 0

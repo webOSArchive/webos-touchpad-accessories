@@ -23,6 +23,13 @@ done
 
 echo "usbsettings: installing device components from $APP_DIR ..."
 
+# The root fs is mounted READ-ONLY on a stock device, so we cannot drop the
+# daemon + launcher into /usr/bin or the upstart job into /etc/event.d without
+# first making it writable. (Some installers remount rw for us, some don't --
+# don't depend on it.) The next boot, which this install requires anyway,
+# restores read-only.
+mount -o remount,rw / 2>/dev/null || true
+
 # --- install our self-contained JS service launcher ----------------------------
 # We ship our own wrapper (a thin shim over stock node + bootstrap-node.js) so the
 # package does NOT depend on an external JS-service-framework feed package. Every

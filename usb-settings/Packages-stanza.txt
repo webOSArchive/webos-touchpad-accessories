@@ -1,10 +1,10 @@
 Package: com.webosarchive.usbsettings
-Version: 1.0.5
+Version: 1.0.6
 Section: System
 Architecture: all
-MD5Sum: 70ae2d8e7149b0c1940315b9d017941b
-Size: 59296
-Filename: com.webosarchive.usbsettings_1.0.5_all.ipk
+MD5Sum: abeb61f5560870012b14d2bc4b46ea88
+Size: 59530
+Filename: com.webosarchive.usbsettings_1.0.6_all.ipk
 Description: USB Settings - toggle USB host (OTG), high-power devices, and USB storage
 Maintainer: webOS Archive
-Source: { "Type":"Application", "Feed":"WOSA Modernize", "Category":"System", "LastUpdated":"1785249962", "Title":"USB Settings", "FullDescription":"A Palm-style settings panel for the USB capabilities the TouchPad's OS hides.<br><br>Toggle <b>USB Host (OTG)</b> mode to use USB keyboards, game controllers and flash drives; enable <b>High-power devices</b> to run gear that draws more current than the port normally allows (such as a DualShock 4 over USB); and <b>mount / unmount USB storage</b> to browse a flash drive. Shows live status and posts a notification when a drive is detected, mounted or removed.<br><br>Self-contained: only uses capabilities and components already on the device, so it needs no other feeds. Adds no drivers, and there is no Bluetooth LE. Fully reversible; uninstall restores stock. Install via Preware/WOSQI and reboot.", "MinWebOSVersion":"3.0.0", "MaxWebOSVersion":"3.0.9", "DeviceCompatibility":["TouchPad","Touchpad Go"], "PostInstallFlags":"RestartDevice", "PostUpdateFlags":"RestartDevice", "License":"GPL" }
+Source: { "Type":"Application", "Feed":"WOSA Modernize", "Category":"System", "LastUpdated":"1785250704", "Title":"USB Settings", "FullDescription":"A Palm-style settings panel for the USB capabilities the TouchPad's OS hides.<br><br>Toggle <b>USB Host (OTG)</b> mode to use USB keyboards, game controllers and flash drives; enable <b>High-power devices</b> to run gear that draws more current than the port normally allows (such as a DualShock 4 over USB); and <b>mount / unmount USB storage</b> to browse a flash drive. Shows live status and posts a notification when a drive is detected, mounted or removed.<br><br>Self-contained: only uses capabilities and components already on the device, so it needs no other feeds. Adds no drivers, and there is no Bluetooth LE. Fully reversible; uninstall restores stock. Install via Preware/WOSQI and reboot.", "MinWebOSVersion":"3.0.0", "MaxWebOSVersion":"3.0.9", "DeviceCompatibility":["TouchPad","Touchpad Go"], "PostInstallFlags":"RestartDevice", "PostUpdateFlags":"RestartDevice", "License":"GPL" }
