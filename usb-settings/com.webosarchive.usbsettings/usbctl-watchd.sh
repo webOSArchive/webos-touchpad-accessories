@@ -17,7 +17,11 @@ CONTROL=/media/internal/.usbctl-control
 STATUS=/media/internal/.usbctl-status
 STATE=/media/internal/.usbctl-state
 OTG=/sys/kernel/debug/otg/mode
-MNT=/media/usbdrive
+# The root fs (and thus /media) is mounted READ-ONLY on a stock device, so we
+# cannot create a mountpoint there. /media/internal is the writable user
+# storage partition and is exactly where webOS file managers browse, so the
+# stick shows up as a folder the user can open.
+MNT=/media/internal/usbdrive
 LOG=/tmp/usbctl-watchd.log
 
 log() { echo "$(date '+%H:%M:%S') usbctl: $*" >> "$LOG" 2>&1; }
@@ -57,7 +61,7 @@ storage_dev() { for d in /dev/sda1 /dev/sda /dev/sdb1 /dev/sdb; do [ -b "$d" ] &
 storage_mount() {
     dev=$(storage_dev); [ -n "$dev" ] || { log "mount: no block device"; return; }
     grep -q " $MNT " /proc/mounts 2>/dev/null && { log "mount: already mounted"; return; }
-    mkdir -p "$MNT" 2>/dev/null
+    mkdir -p "$MNT" 2>>"$LOG" || { log "mount: cannot create mountpoint $MNT"; return; }
     if mount -t vfat -o utf8 "$dev" "$MNT" 2>>"$LOG" || mount "$dev" "$MNT" 2>>"$LOG"
     then log "mounted $dev at $MNT"; else log "mount $dev failed"; fi
 }
