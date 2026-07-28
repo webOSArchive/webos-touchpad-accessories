@@ -1,10 +1,10 @@
 Package: com.webosarchive.usbsettings
-Version: 1.0.7
+Version: 1.0.8
 Section: System
 Architecture: all
-MD5Sum: 9d96574c07ef6a82fd1873cc92df768b
-Size: 59548
-Filename: com.webosarchive.usbsettings_1.0.7_all.ipk
+MD5Sum: 9618940ff64c75ef37ddc0e2b4f440a5
+Size: 59628
+Filename: com.webosarchive.usbsettings_1.0.8_all.ipk
 Description: USB Settings - toggle USB host (OTG), high-power devices, and USB storage
 Maintainer: webOS Archive
-Source: { "Type":"Application", "Feed":"WOSA Modernize", "Category":"System", "LastUpdated":"1785252201", "Title":"USB Settings", "FullDescription":"A Palm-style settings panel for the USB capabilities the TouchPad's OS hides.<br><br>Toggle <b>USB Host (OTG)</b> mode to use USB keyboards, game controllers and flash drives; enable <b>High-power devices</b> to run gear that draws more current than the port normally allows (such as a DualShock 4 over USB); and <b>mount / unmount USB storage</b> to browse a flash drive. Shows live status and posts a notification when a drive is detected, mounted or removed.<br><br>Self-contained: only uses capabilities and components already on the device, so it needs no other feeds. Adds no drivers, and there is no Bluetooth LE. Fully reversible.<br><br>Install <b>and uninstall via Preware / WebOS Quick Install</b>, then reboot. Do not use the launcher's Delete: it skips the cleanup script and would leave a background daemon running (the app hides its Delete button for this reason).", "MinWebOSVersion":"3.0.0", "MaxWebOSVersion":"3.0.9", "DeviceCompatibility":["TouchPad","Touchpad Go"], "PostInstallFlags":"RestartDevice", "PostUpdateFlags":"RestartDevice", "License":"GPL" }
+Source: { "Type":"Application", "Feed":"WOSA Modernize", "Category":"System", "LastUpdated":"1785255977", "Title":"USB Settings", "FullDescription":"A Palm-style settings panel for the USB capabilities the TouchPad's OS hides.<br><br>Toggle <b>USB Host (OTG)</b> mode to use USB keyboards, game controllers and flash drives; enable <b>High-power devices</b> to run gear that draws more current than the port normally allows (such as a DualShock 4 over USB); and <b>mount / unmount USB storage</b> to browse a flash drive. Shows live status and posts a notification when a drive is detected, mounted or removed.<br><br>Self-contained: only uses capabilities and components already on the device, so it needs no other feeds. Adds no drivers, and there is no Bluetooth LE. Fully reversible.<br><br>Install <b>and uninstall via Preware / WebOS Quick Install</b>, then reboot. Do not use the launcher's Delete: it skips the cleanup script and would leave a background daemon running (the app hides its Delete button for this reason).", "MinWebOSVersion":"3.0.0", "MaxWebOSVersion":"3.0.9", "DeviceCompatibility":["TouchPad","Touchpad Go"], "PostInstallFlags":"RestartDevice", "PostUpdateFlags":"RestartDevice", "License":"GPL" }

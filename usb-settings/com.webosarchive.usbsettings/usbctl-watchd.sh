@@ -45,13 +45,16 @@ otg_set() {   # $1 = host | peripheral
 }
 
 # High-power mode: the root hub budgets ~390mA and rejects a config that asks
-# for more (a DS4 declares 500mA -> bConfigurationValue stays 0). Force config 1
-# on any attached-but-unconfigured device. While the flag is on, we re-apply it
-# each loop so freshly-plugged devices get configured too.
+# for more. Force config 1 on any attached-but-unconfigured device. While the
+# flag is on, we re-apply it each loop so freshly-plugged devices get configured
+# too. An unconfigured device reads bConfigurationValue as "0" (e.g. a DS4) OR as
+# EMPTY (e.g. a DragonRise pad the kernel rejected outright) -- handle both, and
+# skip anything already configured ("1"+).
 power_apply() {
     for cv in /sys/bus/usb/devices/*/bConfigurationValue; do
         [ -e "$cv" ] || continue
-        [ "$(cat "$cv" 2>/dev/null)" = "0" ] || continue
+        cur=$(cat "$cv" 2>/dev/null)
+        [ "$cur" = "0" ] || [ -z "$cur" ] || continue
         d=$(dirname "$cv"); [ "$(cat "$d/bNumConfigurations" 2>/dev/null)" -ge 1 ] 2>/dev/null || continue
         echo 1 > "$cv" 2>/dev/null && log "high-power: configured $(basename $d)"
     done

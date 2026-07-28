@@ -1,6 +1,6 @@
 {
 	"id": "com.webosarchive.usbsettings",
-	"version": "1.0.7",
+	"version": "1.0.8",
 	"vendor": "webOS Archive",
 	"type": "web",
 	"main": "index.html",
