@@ -60,12 +60,19 @@ Bluetooth settings → Add device, put the pad in pairing mode, pair it from the
   three apply once, line counts unchanged, guards are idempotent; both patched
   files pass `node --check`.
 - Source JSON parses (Preware-style `JSON.parse`).
-- **Pending hardware confirmation:** first HID connect of a from-scratch-paired
-  DS4 (needs the pad awake). Design connects without a radio cycle; verify.
+- **Confirmed on hardware (2026-07-28):** clean WOSQI install on a fresh device →
+  reboot → pair a DS4 from the "Other" category → auto-connects as a gamepad, no
+  radio cycle. Also verified: press-PS reconnect of a bonded pad, and play in
+  Clone Keen.
 
-## No-BLE caveat / controller scope
+## Controller scope — only the DS4 is confirmed
 
-BT 2.1+EDR radio only — BLE controllers (Xbox One/Series, etc.) can't work.
-The DS4 is covered by the shim's built-in descriptor; other classic-HID pads
-work if they present a clean descriptor (the shim caches it) — grow the built-in
-table as controllers are tested.
+**The Sony DualShock 4 (`054c:05c4`) is the only controller tested on hardware.**
+The shim is descriptor-driven, so other **classic BR/EDR HID** pads *should* work
+— a pad that presents a clean HID descriptor on pairing works with no table entry
+(the shim parses/caches it), and a built-in descriptor covers the DS4 by VID/PID —
+but none of these are verified. See the tested-hardware table in the top-level
+`README.md`, and grow the built-in table as controllers are confirmed.
+
+**No BLE.** The TouchPad radio is BT 2.1+EDR — BLE-only controllers (Xbox
+One/Series, 8BitDo in BLE mode, etc.) cannot work. Hardware limit, not fixable.

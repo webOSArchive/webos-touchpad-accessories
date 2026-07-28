@@ -23,6 +23,36 @@ kernel consumes non-keyboard input, and nothing auto-mounts a disk.
 | Bluetooth gamepad | — | **works, fully** | real evdev gamepad node via `bluetooth-shim/` — all buttons, sticks, analog triggers |
 | Bluetooth LE anything | — | no | 2011 stack predates BLE |
 
+## Tested hardware
+
+The table above is about *capability*; this is the list of **specific devices we
+have actually run**. Everything else is expected-but-unverified.
+
+> **Bluetooth gamepads: the DualShock 4 is the only controller confirmed on
+> hardware.** The shim is descriptor-driven and *should* handle other classic
+> BR/EDR HID pads, but none have been tested. Treat anything not in this table as
+> unverified, and please report results so we can grow it.
+
+### Bluetooth
+
+| Device | VID:PID | Status | Notes |
+|---|---|---|---|
+| Sony DualShock 4 | `054c:05c4` | ✅ **Confirmed** | Full end-to-end: pair from the "Other" category, auto-connect, all 14 buttons + both sticks + analog triggers + d-pad; plays Clone Keen |
+| Sony DualShock 4 (v2) | `054c:09cc` | ⚠️ Untested | Has a built-in descriptor entry, but not run on hardware |
+| Other classic BR/EDR HID gamepads | — | ⚠️ Untested | Expected to work via descriptor recovery (fresh SDP descriptor, or the built-in table); unverified |
+| Bluetooth keyboard | — | ✅ Works | Via Palm's stock stack (not the shim) — the one BT-HID class Palm finished |
+| Any BLE controller (Xbox One/Series, 8BitDo in BLE mode, …) | — | ❌ Impossible | TouchPad radio is BT 2.1+EDR — no LE PHY, hardware limit |
+
+### USB (host mode)
+
+| Device | VID:PID | Status | Notes |
+|---|---|---|---|
+| Sony DualShock 4 | `054c:05c4` | ✅ | Full function; needs a `bConfigurationValue` override (declares 500 mA) |
+| Logitech Precision Gamepad | `046d:c21a` | ✅ | 8 buttons, d-pad as `ABS_X/Y`; use `gamepad-keys` to reach webOS apps |
+| Logitech Optical Mouse | `046d:c077` | ✅ | evdev only — webOS has no cursor |
+| Apple Extended USB Keyboard | — | ✅ | Through its internal 3-port hub; types into the UI |
+| Kingston DataTraveler 101 G2 | — | ✅ | USB mass storage, VFAT read/write |
+
 ## Tools
 
 Both are static ARM binaries; build with
