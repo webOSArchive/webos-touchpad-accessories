@@ -57,7 +57,13 @@ Notes:
 | # | Change | Rollback |
 |---|--------|----------|
 | 1 | `/usr/local/bin/novacomd` replaced with build from patched [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux) (SO_RCVLOWAT→MSG_WAITALL fix, commit `06979cd`; doc in `NOVACOM-TCP.md`) | `sudo cp /usr/local/bin/novacomd.bak-rcvlowat /usr/local/bin/novacomd && sudo systemctl restart novacomd` |
-| 2 | systemd drop-in `/etc/systemd/system/novacomd.service.d/tcp-device.conf`: `ExecStart=/usr/local/bin/novacomd -c 192.168.10.67:6969` | delete the drop-in, `sudo systemctl daemon-reload && sudo systemctl restart novacomd` |
+| 2 | systemd drop-in `/etc/systemd/system/novacomd.service.d/tcp-device.conf`: `ExecStart=/usr/local/bin/novacomd -c 192.168.10.67:6969` | delete the drop-in, `sudo systemctl daemon-reload && sudo systemctl restart novacomd` (or `host-tools/stop-novacomd-wifi.sh`) |
+
+> **novacomd Wi-Fi retry starves USB.** While the Wi-Fi device (drop-in #2) is
+> off/unreachable, novacomd keeps retrying that TCP address and **USB access
+> becomes laggy** — WOSQI installs over USB can even time out mid-way. Switch to
+> USB-only before heavy USB work with `host-tools/stop-novacomd-wifi.sh`, and
+> re-enable Wi-Fi with `host-tools/start-novacomd-wifi.sh [IP]`.
 
 ## Current state / usage
 
