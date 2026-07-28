@@ -1,6 +1,6 @@
 {
 	"id": "com.webosarchive.usbsettings",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"vendor": "webOS Archive",
 	"type": "web",
 	"main": "index.html",
@@ -10,5 +10,6 @@
 	"miniicon": "images/mini-icon.png",
 	"keywords": ["USB", "OTG", "Host", "Storage", "Gamepad", "Settings", "Preferences"],
 	"uiRevision": 2,
+	"removable": false,
 	"serviceId": "com.webosarchive.usbsettings.service"
 }

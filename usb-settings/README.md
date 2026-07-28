@@ -38,8 +38,10 @@ The daemon does the privileged work and writes status back; the app polls it.
 | `/usr/palm/applications/com.webosarchive.usbsettings/` | Enyo app (UI) |
 | `/usr/palm/services/com.webosarchive.usbsettings.service/` | JS bridge service |
 | `/usr/bin/usbctl-watchd` | root daemon (installed by postinst) |
+| `/usr/bin/usbctl-jsservice` | self-contained JS-service launcher (no external framework dep) |
 | `/etc/event.d/usbctl-watchd` | upstart job (auto-start on boot) |
 | `/media/internal/.usbctl-{control,status,state}` | IPC + persisted flags |
+| `/media/internal/usbdrive` | USB flash-drive mountpoint (root fs is read-only, so not `/media`) |
 
 ## Build
 
@@ -54,6 +56,19 @@ to inject `postinst`/`prerm` (which install/remove the daemon and upstart job).
 **Preware or WebOS Quick Install only — NOT `palm-install`.** palm-install runs
 the control scripts as a non-root user, so the daemon never gets set up and the
 toggles do nothing. Distributed via the WOSA Modernize feed.
+
+## Uninstall
+
+**Remove through Preware or WebOS Quick Install — not the launcher's Delete.**
+
+The app ships `"removable": false` in `appinfo.json`, so the launcher deliberately
+offers no Delete button. webOS's built-in launcher delete removes only the app
+package and does **not** run our `prerm` — it would leave the root daemon still
+running (the leftover upstart job even restarts it on boot) plus its `/usr/bin`
+binaries and LS2 service files orphaned on the device. Preware/WOSQI run `prerm`,
+which stops the daemon and removes every component cleanly (and, because the root
+fs is read-only on a stock device, `prerm`/`postinst` remount it `rw` around the
+`/usr/bin` and `/etc/event.d` writes, then restore `ro`).
 
 ## Notes / caveats
 

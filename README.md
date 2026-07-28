@@ -39,6 +39,13 @@ Both do privileged work a jailed webOS app can't do directly, via a small root
 component installed by the package's postinst (an `LD_PRELOAD` shim into
 PmBtEngine for the gamepad; a control-file→root-daemon bridge for USB Settings).
 
+**Uninstall through Preware/WOSQI, not the launcher.** These packages install a
+root component *outside* the app dir, and webOS's built-in launcher delete does
+**not** run the removal (`prerm`) script — it would orphan that component (for USB
+Settings, a still-running root daemon). Preware/WOSQI run `prerm` and remove
+everything cleanly. USB Settings enforces this by shipping `"removable": false`,
+so the launcher offers no Delete button.
+
 ## Tested hardware
 
 The table above is about *capability*; this is the list of **specific devices we
