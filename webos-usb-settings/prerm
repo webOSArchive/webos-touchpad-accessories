@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# prerm -- runs as root before the package is removed. Stops + removes the
+# daemon and its upstart job. Leaves any mounted USB storage alone (the user
+# may have data on it); just removes our control/state IPC files.
+#
+echo "usbsettings: removing device components..."
+
+SVCID=com.webosarchive.usbsettings.service
+
+stop usbctl-watchd 2>/dev/null && echo "  stopped usbctl-watchd" || true
+rm -f /usr/bin/usbctl-watchd
+rm -f /etc/event.d/usbctl-watchd
+rm -f /media/internal/.usbctl-control /media/internal/.usbctl-status /media/internal/.usbctl-state
+
+# remove the JS-service registration we added in postinst
+for bus in pub prv; do
+    rm -f /var/palm/ls2/roles/$bus/$SVCID.json
+    rm -f /var/palm/ls2/services/$bus/$SVCID.service
+done
+
+echo "usbsettings: removal complete."
+exit 0

@@ -1,0 +1,55 @@
+#!/bin/sh
+#
+# postinst -- runs as root via Preware/ipkg (NOT palm-install) after install.
+# Installs the USB control daemon + its upstart job and starts it.
+#
+set -e
+PID=com.webosarchive.usbsettings
+[ -z "$IPKG_OFFLINE_ROOT" ] && IPKG_OFFLINE_ROOT=/media/cryptofs/apps
+
+SVCID=com.webosarchive.usbsettings.service
+
+# Locate the installed app + service dirs -- Preware uses the offline root
+# (/media/cryptofs/apps), a plain `ipkg install` extracts to / .
+APP_DIR=""; SVC_DIR=""
+for R in "$IPKG_OFFLINE_ROOT" /media/cryptofs/apps ""; do
+    if [ -f "$R/usr/palm/applications/$PID/usbctl-watchd.sh" ]; then
+        APP_DIR="$R/usr/palm/applications/$PID"
+        SVC_DIR="$R/usr/palm/services/$SVCID"
+        break
+    fi
+done
+[ -n "$APP_DIR" ] || { echo "ERROR: app dir with usbctl-watchd.sh not found"; exit 1; }
+
+echo "usbsettings: installing device components from $APP_DIR ..."
+
+# --- register the JS bridge service with ls-hubd (homebrew JS service) ---------
+# The proper app installer normally does this, but doing it here makes the
+# package work under any install method. Needs a reboot to take effect
+# (ls-hubd caches its role map at startup).
+if [ -x /var/usr/bin/run-homebrew-js-service ]; then
+    ROLE='{"role":{"exeName":"js","type":"regular","allowedNames":["'"$SVCID"'"]},"permissions":[{"service":"'"$SVCID"'","inbound":["*"],"outbound":["*"]}]}'
+    for bus in pub prv; do
+        mkdir -p /var/palm/ls2/roles/$bus /var/palm/ls2/services/$bus
+        echo "$ROLE" > /var/palm/ls2/roles/$bus/$SVCID.json
+        printf '[D-BUS Service]\nName=%s\nExec=/var/usr/bin/run-homebrew-js-service %s\n' \
+            "$SVCID" "$SVC_DIR" > /var/palm/ls2/services/$bus/$SVCID.service
+    done
+    echo "  registered JS service (reboot required to activate)"
+else
+    echo "  WARNING: /var/usr/bin/run-homebrew-js-service missing -- JS service will not run"
+fi
+
+cp "$APP_DIR/usbctl-watchd.sh" /usr/bin/usbctl-watchd
+chmod 755 /usr/bin/usbctl-watchd
+
+cp "$APP_DIR/usbctl-watchd.conf" /etc/event.d/usbctl-watchd
+chmod 644 /etc/event.d/usbctl-watchd
+
+# start now (also auto-starts on boot via the upstart job)
+stop usbctl-watchd 2>/dev/null || true
+start usbctl-watchd 2>/dev/null && echo "  started usbctl-watchd" \
+    || echo "  usbctl-watchd will start on next boot"
+
+echo "usbsettings: install complete."
+exit 0
