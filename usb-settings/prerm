@@ -14,10 +14,13 @@ SVCID=com.webosarchive.usbsettings.service
 mount -o remount,rw / 2>/dev/null || true
 
 stop usbctl-watchd 2>/dev/null && echo "  stopped usbctl-watchd" || true
+killall usbdevmon 2>/dev/null || true
 rm -f /usr/bin/usbctl-watchd
 rm -f /usr/bin/usbctl-jsservice
+rm -f /usr/bin/usbdevmon
 rm -f /etc/event.d/usbctl-watchd
 rm -f /media/internal/.usbctl-control /media/internal/.usbctl-status /media/internal/.usbctl-state
+rm -f /media/internal/.usbctl-watch /media/internal/.usbctl-devices
 
 # remove the JS-service registration we added in postinst
 for bus in pub prv; do

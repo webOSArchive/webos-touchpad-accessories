@@ -16,6 +16,12 @@ APP=com.webosarchive.usbsettings
 PKG=com.webosarchive.usbsettings.package
 SVC=com.webosarchive.usbsettings.service
 
+# Cross-compile the device-monitor helper (ARM) into the app dir so it ships in
+# the ipk; postinst installs it to /usr/bin. Needs the HP webOS PDK toolchain.
+PDK_GCC="${PDK_GCC:-/opt/PalmPDK/arm-gcc/bin/arm-none-linux-gnueabi-gcc}"
+echo ">> compiling usbdevmon (ARM)"
+"$PDK_GCC" -O2 -Wall -o "$APP/usbdevmon" "$APP/usbdevmon.c" -lrt
+
 echo ">> palm-package ($APP + $SVC)"
 "$PALM_PACKAGE" "$PKG" "$APP" "$SVC"
 

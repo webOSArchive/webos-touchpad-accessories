@@ -53,8 +53,28 @@ echo "  registered JS service (reboot required to activate)"
 cp "$APP_DIR/usbctl-watchd.sh" /usr/bin/usbctl-watchd
 chmod 755 /usr/bin/usbctl-watchd
 
+# device monitor helper (enumerates devices + flags live input for the panel)
+if [ -f "$APP_DIR/usbdevmon" ]; then
+    cp "$APP_DIR/usbdevmon" /usr/bin/usbdevmon
+    chmod 755 /usr/bin/usbdevmon
+fi
+
 cp "$APP_DIR/usbctl-watchd.conf" /etc/event.d/usbctl-watchd
 chmod 644 /etc/event.d/usbctl-watchd
+
+# Arm the OTG controller now if the USB port is idle (typical for a Preware
+# install: no PC cable attached). One persistent write enables follow-the-cable
+# accessory support forever; an UN-armed device hard-hangs its port on OTG-cable
+# insert, so this is a safety fix. Skipped when a PC/novacom connection is live
+# (the write would kill it mid-install) -- the daemon then arms at the first
+# idle-port moment instead (e.g. right after the post-install reboot).
+HC=$(cat /sys/devices/platform/usb_gadget/host_connected 2>/dev/null)
+if [ "$HC" != "1" ]; then
+    mount -t debugfs none /sys/kernel/debug 2>/dev/null || true
+    if echo host > /sys/kernel/debug/otg/mode 2>/dev/null; then
+        echo "  OTG armed (accessories enabled)"
+    fi
+fi
 
 # start now (also auto-starts on boot via the upstart job)
 stop usbctl-watchd 2>/dev/null || true

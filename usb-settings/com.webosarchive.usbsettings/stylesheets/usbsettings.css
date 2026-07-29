@@ -61,3 +61,75 @@
 	right: 16px;
 	top: 12px;
 }
+
+/* --- Connected devices list --- */
+.usb-dev-empty {
+	color: #999;
+	font-style: italic;
+}
+.usb-dev-badge {
+	display: inline-block;
+	min-width: 34px;
+	text-align: center;
+	font-size: 12px;
+	font-weight: bold;
+	color: #fff;
+	padding: 2px 6px;
+	margin-right: 12px;
+	border-radius: 4px;
+	background: #888;               /* generic / USB */
+}
+.usb-badge-gamepad  { background: #3a7bd5; }
+.usb-badge-keyboard { background: #6b6f76; }
+.usb-badge-mouse    { background: #7d5ba6; }
+.usb-badge-generic  { background: #888; }
+
+.usb-dev-name {
+	/* no max-width: let flex fill the row so the status hugs the right edge;
+	   ellipsis truncation still applies via overflow */
+	max-width: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.usb-dev-status {
+	font-size: 15px;
+	font-weight: bold;
+	text-align: right;
+	white-space: nowrap;
+	color: transparent;            /* blank = nothing to report */
+}
+.usb-dev-status.active {
+	color: #2e9e4f;                /* Input received — green */
+}
+.usb-dev-status.needspower {
+	color: #d08a00;                /* Needs power — amber */
+}
+
+/* --- Reset USB (last resort) --- */
+.usb-reset-label {
+	color: #c0392b;                /* red */
+	font-weight: bold;
+	text-align: center;
+	width: 100%;
+}
+.usb-reset-label.disabled {
+	color: #bbb;
+}
+.usb-dev-status.connecting {
+	color: #999;                   /* Connecting… — muted gray */
+	font-weight: normal;
+	font-style: italic;
+}
+.usb-dev-status.noinput {
+	color: #c0392b;                /* No input — Reset USB — red alert */
+}
+.usb-badge-storage  { background: #2e8b57; }   /* DRV — green */
+
+/* Device-type icons (Palm silhouettes, 40x48 natural; trident 32x32) */
+.usb-dev-icon {
+	display: block;
+	max-height: 36px;
+	width: auto;
+	margin-right: 12px;
+}
