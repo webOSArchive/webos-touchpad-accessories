@@ -1,6 +1,12 @@
 enyo.kind({
 	name: "UsbSettingsApp",
 	kind: "VFlexBox",
+	// Card focus drives whether we hold the controller -- see startWatching().
+	applicationEvents: {
+		onWindowActivated:   "windowActivated",
+		onWindowDeactivated: "windowDeactivated",
+		onUnload:            "windowDeactivated"
+	},
 	DEVROWS: 6,                 // pre-built device slots (populated from status)
 	components: [
 		{kind: "Toolbar", className: "enyo-toolbar-light accounts-header", pack: "center", components: [
@@ -137,10 +143,54 @@ enyo.kind({
 		this.prevMounted = null;
 		this.mounted = false;       // gate Reset USB
 		this.$.spinner.show();
+		this.watching = false;
+		this.pollTimer = null;
+		this.startWatching();
+		this.bindLifecycleFallbacks();
+	},
+
+	/* --- panel lifecycle: never hold the controller while we're not in front ---
+	   The device monitor grabs input devices EXCLUSIVELY (EVIOCGRAB) so it can
+	   show the "input received" indicator. A grabbed pad delivers events to
+	   nobody else -- so leaving this card open in the background gives every
+	   game a dead controller, which is exactly what a user does when they check
+	   the pad here and then launch a game. The keepalive is therefore refreshed
+	   ONLY while this panel is actually in front. */
+	startWatching: function() {
+		if (this.watching) { return; }
+		this.watching = true;
 		this.refresh();
 		// 1 Hz: fast enough to catch the ~1.5s "input received" flash, and doubles
 		// as the device-monitor keepalive.
 		this.pollTimer = window.setInterval(enyo.bind(this, "refresh"), 1000);
+	},
+
+	stopWatching: function() {
+		if (!this.watching) { return; }
+		this.watching = false;
+		if (this.pollTimer) { window.clearInterval(this.pollTimer); this.pollTimer = null; }
+		// Stopping the timer alone would only let the keepalive go stale, leaving
+		// the grab in place for the staleness window -- long enough to lose the
+		// race with a game launching right behind us. Say so explicitly.
+		this.$.send.call({command: "watch-off"});
+	},
+
+	windowActivated:   function() { this.startWatching(); },
+	windowDeactivated: function() { this.stopWatching(); },
+
+	// The Enyo application events above are the intended mechanism, but a missed
+	// deactivate here is invisible and reads as broken hardware, so also listen
+	// for the underlying webOS card events and for unload. Every path funnels
+	// into the same idempotent pair, so duplicate delivery is harmless.
+	bindLifecycleFallbacks: function() {
+		var self = this;
+		var on   = function() { self.startWatching(); };
+		var off  = function() { self.stopWatching(); };
+		try {
+			document.addEventListener("stageActivate",   on,  false);
+			document.addEventListener("stageDeactivate", off, false);
+			window.addEventListener("unload",            off, false);
+		} catch (e) {}
 	},
 
 	refresh: function() {

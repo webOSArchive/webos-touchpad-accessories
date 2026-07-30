@@ -145,13 +145,34 @@ static void scan_input(void)
         name[0] = 0;
         ioctl(fd, EVIOCGNAME(sizeof(name)), name);
         if (is_builtin(name)) { close(fd); continue; }
-        /* Grab exclusively. On webOS, hidd holds the input stream when no app
-         * has grabbed the device, so a non-grabbing reader sees zero events --
-         * we must grab to observe input. Safe here: this monitor runs ONLY while
-         * the USB Settings panel is foreground (the daemon stops it otherwise),
-         * so no game is competing for the pad. Best-effort; read anyway if it
-         * fails. The grab releases when the fd closes (monitor exit). */
-        { int one = 1; ioctl(fd, EVIOCGRAB, &one); }
+        /* Read SHARED -- do NOT EVIOCGRAB. This restores the design stated at the
+         * top of this file, which a later change quietly broke.
+         *
+         * An earlier version grabbed here, justified as "hidd holds the input
+         * stream when no app has grabbed the device, so a non-grabbing reader
+         * sees zero events". That premise is almost certainly a
+         * misattribution: the likely observation was zero events while a GAME
+         * held the grab, not hidd. Evidence against it -- a game's own grab of
+         * the same node succeeds, which is impossible if hidd already held one.
+         *
+         * The cost of being wrong the other way is severe and was paid in full:
+         * EVIOCGRAB is EXCLUSIVE, so while this monitor ran, every other reader
+         * got ZERO events with no error -- just silence. A user who opened this
+         * panel to check their controller and then launched a game found a dead
+         * pad that still enumerated and identified perfectly. That is a
+         * system-wide side effect for the sake of a diagnostic indicator, and no
+         * amount of lifecycle gating makes it safe: any missed teardown, orphaned
+         * process or lost focus event leaves a controller silently broken.
+         *
+         * Escape hatch for diagnosis only: USBDEVMON_GRAB=1 restores the grab.
+         * If the "input received" indicator ever stops working without it, that
+         * means the old premise was right after all -- fix it some other way
+         * (e.g. grab only while the panel is genuinely frontmost AND release on
+         * every teardown path), do not just turn this back on. */
+        {
+            const char *g = getenv("USBDEVMON_GRAB");
+            if (g && *g == '1') { int one = 1; ioctl(fd, EVIOCGRAB, &one); }
+        }
         in[nin].idx = i;
         in[nin].fd = fd;
         snprintf(in[nin].name, sizeof(in[nin].name), "%s", name[0] ? name : "input device");
@@ -344,9 +365,24 @@ static void write_devices(long t)
     }
 }
 
+/* Record our pid so the watch daemon can stop us WITHOUT walking /proc.
+ * That matters: the daemon's teardown sits on its 1 Hz loop, and anything
+ * fork-per-process there re-creates the fork storm that used to steal frames
+ * from games. /tmp is tmpfs, so this costs no flash. */
+#define PIDFILE "/tmp/usbdevmon.pid"
+
+static void write_pidfile(void)
+{
+    FILE *f = fopen(PIDFILE, "w");
+    if (!f) return;
+    fprintf(f, "%d\n", (int)getpid());
+    fclose(f);
+}
+
 int main(void)
 {
     long last_scan = 0;
+    write_pidfile();
     scan_input();
     scan_usb_pending(now_ms());
 

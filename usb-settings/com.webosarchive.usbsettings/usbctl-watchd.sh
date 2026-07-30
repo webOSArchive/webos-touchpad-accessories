@@ -183,12 +183,47 @@ reset_usb() {
 }
 
 # --- device monitor (usbdevmon) lifecycle ------------------------------------
-# Runs only while the app panel is open, gated on the WATCH keepalive file the
-# app refreshes (~every poll). Kept off otherwise so it never reads input nodes
-# while a game is running (it reads SHARED/no-grab anyway, but off is cleaner and
-# avoids needless USB churn -- churn is what wedges devices in the first place).
+# Runs only while the app panel is IN FRONT, gated on the WATCH keepalive the
+# app refreshes each poll and DELETES as soon as it loses focus (watch-off).
+#
+# The monitor now reads input nodes shared -- no EVIOCGRAB. It did grab for a
+# while, and that shipped: an exclusive grab starves every other reader silently,
+# so a controller checked in this panel was then DEAD in any game launched
+# afterwards, while still enumerating and identifying perfectly. Lifecycle gating
+# alone could never make that safe (a missed teardown, an orphaned process or a
+# lost focus event each leave a controller broken), so usbdevmon does not grab at
+# all -- see the long comment at its scan_input(). Keeping the monitor off when
+# unused also avoids needless USB churn, which is what wedges devices.
 DEVMON_PID=""
 devmon_running() { [ -n "$DEVMON_PID" ] && kill -0 "$DEVMON_PID" 2>/dev/null; }
+
+# Stop a monitor we are NOT tracking. An install RESTARTS this daemon, which
+# orphans any monitor that was running: the new daemon has an empty DEVMON_PID,
+# so devmon_running is false and stopping would be a silent no-op while the
+# orphan kept reading input nodes indefinitely.
+#
+# usbdevmon records its pid in tmpfs, so this costs ONE builtin `[ -f ]` on the
+# idle path -- do not "improve" it into a /proc walk that forks per process.
+# That is exactly the fork storm documented at the top of this file, and a first
+# attempt at this function did precisely that, from inside devmon_stop, which
+# runs every second.
+DEVMON_PIDFILE=/tmp/usbdevmon.pid
+devmon_sweep() {
+    [ -f "$DEVMON_PIDFILE" ] || return 0
+    _spid=""
+    read -r _spid < "$DEVMON_PIDFILE" 2>/dev/null
+    case "$_spid" in ''|*[!0-9]*) rm -f "$DEVMON_PIDFILE"; return 0 ;; esac
+    # Confirm it really is a monitor before signalling: pids get reused, and a
+    # stale file must never let us kill an unrelated process. This forks, but
+    # only on the rare path where a pidfile actually exists.
+    if [ -r "/proc/$_spid/cmdline" ] && \
+       grep -q usbdevmon "/proc/$_spid/cmdline" 2>/dev/null
+    then
+        kill "$_spid" 2>/dev/null && log "devmon swept stray pid $_spid"
+    fi
+    rm -f "$DEVMON_PIDFILE"
+    return 0
+}
 devmon_start() {
     devmon_running && return
     [ -x "$USBDEVMON" ] || { log "devmon: $USBDEVMON missing"; return; }
@@ -199,6 +234,7 @@ devmon_start() {
 # Called every loop, so the common "monitor already stopped" case must not fork
 # (it used to `rm -f` unconditionally, once a second, forever).
 devmon_stop() {
+    devmon_sweep                                # builtin test unless a pidfile exists
     if devmon_running; then
         kill "$DEVMON_PID" 2>/dev/null; log "devmon stopped"
     elif [ -z "$DEVMON_PID" ] && [ ! -e "$DEVICES" ]; then
@@ -251,6 +287,7 @@ write_status() {
 # --- main loop ----------------------------------------------------------------
 log "started (pid $$)"
 rm -f "$WATCH" "$DEVICES" 2>/dev/null    # clear stale keepalive/monitor state
+devmon_sweep                             # kill a monitor orphaned by a restart
 ensure_debugfs
 # OTG state is probed from the hardware inside write_status (the controller
 # flips modes on its own on cable events, so a saved flag would lie). The power

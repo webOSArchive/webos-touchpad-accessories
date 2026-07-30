@@ -1,10 +1,58 @@
 Package: com.webosarchive.usbsettings
-Version: 1.0.8
+Version: 1.1.8
 Section: System
 Architecture: all
-MD5Sum: 9618940ff64c75ef37ddc0e2b4f440a5
-Size: 59628
-Filename: com.webosarchive.usbsettings_1.0.8_all.ipk
+MD5Sum: da75dd20f86832ecf4c6a087e2547809
+Size: 87602
+Filename: com.webosarchive.usbsettings_1.1.8_all.ipk
 Description: USB Settings - toggle USB host (OTG), high-power devices, and USB storage
 Maintainer: webOS Archive
-Source: { "Type":"Application", "Feed":"WOSA Modernize", "Category":"System", "LastUpdated":"1785255977", "Title":"USB Settings", "FullDescription":"A Palm-style settings panel for the USB capabilities the TouchPad's OS hides.<br><br>Toggle <b>USB Host (OTG)</b> mode to use USB keyboards, game controllers and flash drives; enable <b>High-power devices</b> to run gear that draws more current than the port normally allows (such as a DualShock 4 over USB); and <b>mount / unmount USB storage</b> to browse a flash drive. Shows live status and posts a notification when a drive is detected, mounted or removed.<br><br>Self-contained: only uses capabilities and components already on the device, so it needs no other feeds. Adds no drivers, and there is no Bluetooth LE. Fully reversible.<br><br>Install <b>and uninstall via Preware / WebOS Quick Install</b>, then reboot. Do not use the launcher's Delete: it skips the cleanup script and would leave a background daemon running (the app hides its Delete button for this reason).", "MinWebOSVersion":"3.0.0", "MaxWebOSVersion":"3.0.9", "DeviceCompatibility":["TouchPad","Touchpad Go"], "PostInstallFlags":"RestartDevice", "PostUpdateFlags":"RestartDevice", "License":"GPL" }
+Source: { "Type":"Application", "Feed":"WOSA Modernize", "Category":"System", "LastUpdated":"1785424349", "Title":"USB Settings", "FullDescription":"A Palm-style settings panel for the USB capabilities the TouchPad's OS hides.<br><br>Toggle <b>USB Host (OTG)</b> mode to use USB keyboards, game controllers and flash drives; enable <b>High-power devices</b> to run gear that draws more current than the port normally allows (such as a DualShock 4 over USB); and <b>mount / unmount USB storage</b> to browse a flash drive. Shows live status and posts a notification when a drive is detected, mounted or removed.<br><br>Includes a <b>troubleshooting panel</b>: a live list of connected accessories with an <b>input received</b> indicator, so you can press a button and see at a glance whether a controller is really responding, plus a <b>Reset USB</b> button that clears a wedged port.<br><br>Self-contained: only uses capabilities and components already on the device, so it needs no other feeds. Adds no drivers, and there is no Bluetooth LE. Fully reversible.<br><br>Install <b>and uninstall via Preware / WebOS Quick Install</b>, then reboot. Do not use the launcher's Delete: it skips the cleanup script and would leave a background daemon running (the app hides its Delete button for this reason).", "MinWebOSVersion":"3.0.0", "MaxWebOSVersion":"3.0.9", "DeviceCompatibility":["TouchPad","Touchpad Go"], "PostInstallFlags":"RestartDevice", "PostUpdateFlags":"RestartDevice", "License":"GPL" }
+
+
+================================================================================
+1.1.8 release notes  (NOT part of the stanza -- for the changelog / feed post)
+================================================================================
+
+Fixes a bug that made game controllers appear broken in OTHER apps.
+
+The device monitor behind the "input received" indicator used to open each
+controller EXCLUSIVELY (EVIOCGRAB). An exclusive grab starves every other reader
+silently -- no error, just no events -- so a controller you had just verified in
+this panel was then dead in any game you launched afterwards, while still
+enumerating and identifying perfectly. Every visible sign said the hardware was
+fine, which is what made it so hard to pin down.
+
+  * The monitor now reads input devices SHARED and never grabs. Nothing this app
+    does can take a controller away from a game.
+  * The panel releases its monitor as soon as it is no longer in front, rather
+    than only when it is closed, so nothing keeps running behind you.
+  * A monitor orphaned by an app update is cleaned up on the next daemon start.
+
+Also restores the 1.1.4 daemon performance work, which an earlier build had
+inadvertently reverted. The background daemon is builtin-only on its idle path
+again instead of forking ~15 processes a second; measured on device at 41 -> 15
+jiffies per 10 s. That fork storm is what used to stall games about once a
+second, so this matters well beyond tidiness.
+
+Upgrade note: install over the top via Preware / WebOS Quick Install and reboot,
+as usual. No settings are lost.
+
+--------------------------------------------------------------------------------
+MAINTAINER WARNING -- read before editing this app
+--------------------------------------------------------------------------------
+
+PULL BEFORE YOU EDIT usbctl-watchd.sh, and diff against the shipped ipk.
+
+The 1.1.4 fork-storm fix landed in PR #1 (usbctl-watchd-perf). Work done from a
+clone that predated that merge started from the pre-1.1.4 file, silently reverted
+the fix, and shipped it as 1.1.7 -- the daemon went back to forking ~15 processes
+a second on its idle path, which is exactly what stalls games about once a
+second. Nothing about the file looks wrong when you do this; it just quietly
+performs like the old one.
+
+The idle path of this daemon is load-bearing and easy to regress by accident.
+Verify by MEASUREMENT rather than reading: sample /proc/<pid>/stat over 10s and
+sum fields 14-17. Fields 16-17 are the point -- a shell script's forks are child
+processes, so their CPU lands in cutime/cstime, and summing only utime/stime will
+show a fork storm as near-zero.
