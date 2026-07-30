@@ -33,17 +33,44 @@ log() { echo "$(date '+%H:%M:%S') usbctl: $*" >> "$LOG" 2>&1; }
 ensure_debugfs() { [ -e "$OTG" ] || mount -t debugfs none /sys/kernel/debug 2>/dev/null; }
 
 # --- persisted flags (otg + power mode; storage/present are probed live) ------
-get_flag() { grep "^$1=" "$STATE" 2>/dev/null | cut -d= -f2; }
-set_flag() {
-    tmp="$STATE.tmp.$$"; touch "$STATE" 2>/dev/null
-    grep -v "^$1=" "$STATE" 2>/dev/null > "$tmp"; echo "$1=$2" >> "$tmp"
-    mv -f "$tmp" "$STATE" 2>/dev/null
+#
+# PERFORMANCE, and why this file is written the way it is (measured 2026-07-29):
+# every `$(...)` command substitution forks a subshell -- even around a pure
+# shell function -- and busybox `cat`/`grep`/`cut`/`dirname`/`date` each fork and
+# exec. The original helpers used those on the 1 Hz loop path, so this idle
+# daemon forked ~20 processes EVERY SECOND: measured at 114 jiffies of CPU per
+# 10 s (~11% of a core) arriving as a ~110 ms burst once a second. That is
+# invisible on the desktop but it stole frames from games -- SDL Quake went from
+# a steady 50 ms frame time to a 200-450 ms stall every single second, and the
+# stutter tracked this daemon exactly (stopping it made the stall vanish).
+# So: the idle path below uses SHELL BUILTINS ONLY -- `read` instead of `cat`,
+# parameter expansion instead of `dirname`/`basename`, cached variables instead
+# of re-reading the state file. Forks are allowed only on paths that run when
+# something actually changed. Keep it that way.
+F_otg=""; F_power="off"; F_armed=""
+
+state_load() {
+    F_otg=""; F_power="off"; F_armed=""
+    while IFS='=' read -r k v; do
+        case "$k" in
+            otg)   F_otg="$v" ;;
+            power) F_power="$v" ;;
+            armed) F_armed="$v" ;;
+        esac
+    done < "$STATE" 2>/dev/null
+    [ -n "$F_power" ] || F_power="off"
+}
+
+# Called only when a flag actually changes, so the one `mv` fork is fine.
+state_save() {
+    { echo "otg=$F_otg"; echo "power=$F_power"; echo "armed=$F_armed"; } \
+        > "$STATE.tmp" 2>/dev/null && mv -f "$STATE.tmp" "$STATE" 2>/dev/null
 }
 
 # --- operations ---------------------------------------------------------------
 otg_set() {   # $1 = host | peripheral
     ensure_debugfs
-    if echo "$1" > "$OTG" 2>/dev/null; then set_flag otg "$1"; log "otg -> $1"
+    if echo "$1" > "$OTG" 2>/dev/null; then F_otg="$1"; state_save; log "otg -> $1"
     else log "otg write failed ($1)"; fi
 }
 
@@ -55,14 +82,16 @@ otg_set() {   # $1 = host | peripheral
 # early is a safety fix, not just convenience. We arm only when the port is
 # IDLE (no PC/charger gadget connection) because the write force-switches to
 # host and would kill an active novacom/charge session mid-use.
+# Once armed this costs a single builtin test per loop -- keep that fast path.
 arm_otg_once() {
-    [ "$(get_flag armed)" = "yes" ] && return
-    hc=$(cat /sys/devices/platform/usb_gadget/host_connected 2>/dev/null)
+    [ "$F_armed" = "yes" ] && return
+    hc=""
+    read -r hc < /sys/devices/platform/usb_gadget/host_connected 2>/dev/null
     [ "$hc" = "1" ] && return                   # PC connected: try again later
-    [ -d /sys/bus/usb/devices/usb1 ] && { set_flag armed yes; return; }  # already host
+    [ -d /sys/bus/usb/devices/usb1 ] && { F_armed=yes; state_save; return; }  # already host
     ensure_debugfs
     if echo host > "$OTG" 2>/dev/null; then
-        set_flag armed yes
+        F_armed=yes; state_save
         log "OTG armed (one-shot, persists across reboots)"
     fi
 }
@@ -73,27 +102,66 @@ arm_otg_once() {
 # too. An unconfigured device reads bConfigurationValue as "0" (e.g. a DS4) OR as
 # EMPTY (e.g. a DragonRise pad the kernel rejected outright) -- handle both, and
 # skip anything already configured ("1"+).
+# Runs every second while high-power is on, so it is entirely builtins: the glob
+# is shell-expanded, values come from `read`, and the paths from parameter
+# expansion. Only the rare successful write forks (via log).
 power_apply() {
     for cv in /sys/bus/usb/devices/*/bConfigurationValue; do
         [ -e "$cv" ] || continue
-        cur=$(cat "$cv" 2>/dev/null)
+        cur=""
+        read -r cur < "$cv" 2>/dev/null
         [ "$cur" = "0" ] || [ -z "$cur" ] || continue
-        d=$(dirname "$cv"); [ "$(cat "$d/bNumConfigurations" 2>/dev/null)" -ge 1 ] 2>/dev/null || continue
-        echo 1 > "$cv" 2>/dev/null && log "high-power: configured $(basename $d)"
+        d="${cv%/bConfigurationValue}"
+        nc=""
+        read -r nc < "$d/bNumConfigurations" 2>/dev/null
+        [ -n "$nc" ] && [ "$nc" -ge 1 ] 2>/dev/null || continue
+        echo 1 > "$cv" 2>/dev/null && log "high-power: configured ${d##*/}"
     done
 }
 
-storage_dev() { for d in /dev/sda1 /dev/sda /dev/sdb1 /dev/sdb; do [ -b "$d" ] && { echo "$d"; return; }; done; }
+# Probes set variables instead of echoing, because `dev=$(storage_probe)` would
+# fork a subshell on every status refresh. S_dev / S_mounted are the outputs.
+#
+# Measured on device E (busybox ash, per call): this presence check is 0.4 ms,
+# but ANY scan of /proc/mounts is expensive -- 26 ms via a `while read` loop
+# (71 lines, and ash's `read` issues one syscall PER BYTE) or 14 ms via a `grep`
+# fork. So the mount state is CACHED and re-probed only when it can actually
+# have changed: when the set of block devices changes, or right after we mount
+# or unmount something ourselves. With no USB drive attached -- the normal case,
+# and the one that matters while a game is running -- the per-second cost is
+# just the 0.4 ms presence check.
+S_dev=""; S_mounted="no"; S_dev_seen="__init__"
+storage_probe() {
+    S_dev=""
+    for d in /dev/sda1 /dev/sda /dev/sdb1 /dev/sdb; do
+        [ -b "$d" ] && { S_dev="$d"; return; }
+    done
+}
+mount_probe() {
+    if grep -q " $MNT " /proc/mounts 2>/dev/null; then S_mounted="yes"; else S_mounted="no"; fi
+}
+# What the 1 Hz path calls: cheap presence check, mount scan only on a change.
+storage_refresh() {
+    storage_probe
+    [ "$S_dev" = "$S_dev_seen" ] && return
+    S_dev_seen="$S_dev"
+    mount_probe
+}
 storage_mount() {
-    dev=$(storage_dev); [ -n "$dev" ] || { log "mount: no block device"; return; }
-    grep -q " $MNT " /proc/mounts 2>/dev/null && { log "mount: already mounted"; return; }
+    storage_probe
+    [ -n "$S_dev" ] || { log "mount: no block device"; return; }
+    mount_probe
+    [ "$S_mounted" = "yes" ] && { log "mount: already mounted"; return; }
     mkdir -p "$MNT" 2>>"$LOG" || { log "mount: cannot create mountpoint $MNT"; return; }
-    if mount -t vfat -o utf8 "$dev" "$MNT" 2>>"$LOG" || mount "$dev" "$MNT" 2>>"$LOG"
-    then log "mounted $dev at $MNT"; else log "mount $dev failed"; fi
+    if mount -t vfat -o utf8 "$S_dev" "$MNT" 2>>"$LOG" || mount "$S_dev" "$MNT" 2>>"$LOG"
+    then log "mounted $S_dev at $MNT"; else log "mount $S_dev failed"; fi
+    mount_probe                       # our own action changed it -- resync
 }
 storage_unmount() {
-    grep -q " $MNT " /proc/mounts 2>/dev/null || { log "unmount: not mounted"; return; }
+    mount_probe
+    [ "$S_mounted" = "yes" ] || { log "unmount: not mounted"; return; }
     sync; umount "$MNT" 2>>"$LOG" && log "unmounted $MNT" || { umount -l "$MNT" 2>>"$LOG"; log "lazy-unmounted $MNT"; }
+    mount_probe                       # our own action changed it -- resync
 }
 
 # Full OTG reset -- the "last resort" unwedge. A USB device can enumerate but
@@ -102,14 +170,15 @@ storage_unmount() {
 # REFUSED while storage is mounted (the cycle would yank the drive mid-use);
 # the app also disables the button then, but guard here too.
 reset_usb() {
-    grep -q " $MNT " /proc/mounts 2>/dev/null && { log "reset refused: storage mounted"; return; }
+    mount_probe
+    [ "$S_mounted" = "yes" ] && { log "reset refused: storage mounted"; return; }
     ensure_debugfs
     log "USB reset: OTG cycle begin"
-    echo peripheral > "$OTG" 2>/dev/null; set_flag otg peripheral; write_status
+    echo peripheral > "$OTG" 2>/dev/null; F_otg=peripheral; state_save; write_status
     sleep 3
-    echo host > "$OTG" 2>/dev/null;       set_flag otg host
+    echo host > "$OTG" 2>/dev/null;       F_otg=host;       state_save
     sleep 1
-    [ "$(get_flag power)" = "on" ] && power_apply
+    [ "$F_power" = "on" ] && power_apply
     log "USB reset: done (host mode restored)"
 }
 
@@ -127,21 +196,35 @@ devmon_start() {
     DEVMON_PID=$!
     log "devmon started (pid $DEVMON_PID)"
 }
+# Called every loop, so the common "monitor already stopped" case must not fork
+# (it used to `rm -f` unconditionally, once a second, forever).
 devmon_stop() {
-    devmon_running && { kill "$DEVMON_PID" 2>/dev/null; log "devmon stopped"; }
+    if devmon_running; then
+        kill "$DEVMON_PID" 2>/dev/null; log "devmon stopped"
+    elif [ -z "$DEVMON_PID" ] && [ ! -e "$DEVICES" ]; then
+        return                                  # already stopped and cleaned up
+    fi
     DEVMON_PID=""
     rm -f "$DEVICES" 2>/dev/null
 }
-# app is "watching" if it refreshed the keepalive within the last few seconds
+# App is "watching" if it refreshed the keepalive within the last few seconds.
+# The `[ -f ]` test short-circuits to a builtin when no panel is open, and a
+# keepalive found stale is DELETED so we stop paying for it on later loops --
+# otherwise a panel opened once left this forking cat+date every second forever.
 watch_fresh() {
-    WF_WT=$(cat "$WATCH" 2>/dev/null); WF_NOW=$(date +%s 2>/dev/null)
+    [ -f "$WATCH" ] || return 1
+    WF_WT=""
+    read -r WF_WT < "$WATCH" 2>/dev/null
+    WF_NOW=$(date +%s 2>/dev/null)              # only while a panel IS open
     [ -n "$WF_WT" ] && [ -n "$WF_NOW" ] && \
-        [ $((WF_NOW - WF_WT)) -ge 0 ] 2>/dev/null && [ $((WF_NOW - WF_WT)) -lt 6 ] 2>/dev/null
+        [ $((WF_NOW - WF_WT)) -ge 0 ] 2>/dev/null && \
+        [ $((WF_NOW - WF_WT)) -lt 6 ] 2>/dev/null && return 0
+    rm -f "$WATCH" 2>/dev/null
+    return 1
 }
 
 # --- status (written only when it CHANGES, to avoid /media/internal flash wear
 #     from a 1 Hz rewrite loop) ---------------------------------------------
-json_bool() { [ "$1" = "yes" ] && echo true || echo false; }
 LAST_STATUS=""
 write_status() {
     # OTG state comes from the HARDWARE every time, not our saved flag: the
@@ -151,17 +234,18 @@ write_status() {
     # host controller is registered, i.e. host mode. Keep the flag synced so
     # toggles behave consistently.
     if [ -d /sys/bus/usb/devices/usb1 ]; then otg=host; else otg=peripheral; fi
-    [ "$otg" = "$(get_flag otg)" ] || set_flag otg "$otg"
-    power=$(get_flag power); [ "$power" = "on" ] || power=off
-    dev=$(storage_dev); present=no; mounted=no
-    [ -n "$dev" ] && present=yes
-    grep -q " $MNT " /proc/mounts 2>/dev/null && mounted=yes
-    s=$(printf '{"otg":"%s","power":"%s","storage":{"present":%s,"mounted":%s,"dev":"%s","mountpoint":"%s"}}' \
-        "$otg" "$power" "$(json_bool $present)" "$(json_bool $mounted)" "$dev" "$MNT")
-    [ "$s" = "$LAST_STATUS" ] && return          # unchanged -> no write
+    [ "$otg" = "$F_otg" ] || { F_otg="$otg"; state_save; }
+    [ "$F_power" = "on" ] || F_power=off
+    storage_refresh
+    if [ -n "$S_dev" ];          then present=true; else present=false; fi
+    if [ "$S_mounted" = "yes" ]; then mounted=true; else mounted=false; fi
+    # Built by string concatenation, not printf + four command substitutions.
+    s="{\"otg\":\"$otg\",\"power\":\"$F_power\",\"storage\":{\"present\":$present,\"mounted\":$mounted,\"dev\":\"$S_dev\",\"mountpoint\":\"$MNT\"}}"
+    [ "$s" = "$LAST_STATUS" ] && return          # unchanged -> no write, no fork
     LAST_STATUS="$s"
-    tmp="$STATUS.tmp.$$"
-    echo "$s" > "$tmp"; mv -f "$tmp" "$STATUS" 2>/dev/null
+    # Only reached when the state actually changed, so the mv fork is fine; keep
+    # it for atomicity, since the app polls this file concurrently.
+    echo "$s" > "$STATUS.tmp" 2>/dev/null && mv -f "$STATUS.tmp" "$STATUS" 2>/dev/null
 }
 
 # --- main loop ----------------------------------------------------------------
@@ -172,6 +256,7 @@ ensure_debugfs
 # flips modes on its own on cable events, so a saved flag would lie). The power
 # flag IS a persistent preference (the daemon keeps enforcing it), so leave it.
 [ -f "$STATE" ] || echo "power=off" > "$STATE"
+state_load
 write_status
 
 while true; do
@@ -181,8 +266,8 @@ while true; do
         case "$cmd" in
             otg-host)        otg_set host ;;
             otg-peripheral)  otg_set peripheral ;;
-            power-on)        set_flag power on;  power_apply ;;
-            power-off)       set_flag power off ;;
+            power-on)        F_power=on;  state_save; power_apply ;;
+            power-off)       F_power=off; state_save ;;
             mount)           storage_mount ;;
             unmount)         storage_unmount ;;
             reset)           reset_usb ;;
@@ -198,7 +283,7 @@ while true; do
     # interrupt endpoint failing to bind an input node, not a config problem --
     # config already reads 1. Forcing config fought the wrong layer; the device
     # monitor instead surfaces the detected-but-input-less device directly.)
-    [ "$(get_flag power)" = "on" ] && power_apply
+    [ "$F_power" = "on" ] && power_apply
     # run the device monitor only while the app panel is open (keepalive fresh)
     if watch_fresh; then devmon_start; else devmon_stop; fi
     write_status
