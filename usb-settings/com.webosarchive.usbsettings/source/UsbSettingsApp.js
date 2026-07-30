@@ -36,7 +36,7 @@ enyo.kind({
 						]}
 					]},
 					{className: "accounts-body-text",
-					 content: $L("Accessories connect automatically: attach your keyboard, controller or drive to the OTG cable first, then plug the cable into the TouchPad. This indicator shows when the port is in host (accessory) mode. While hosting, USB charging and computer sync are unavailable — unplug the OTG cable to get them back.")},
+					 content: $L("Accessories connect automatically: attach your USB device to a powered OTG cable first, then plug the cable into the TouchPad. This indicator shows when the port is in OTG mode. While hosting, USB charging and computer sync are unavailable — unplug the OTG cable to get them back.")},
 
 					/* --- High power --- */
 					{kind: "RowGroup", className: "accounts-group", caption: $L("Power"), components: [
@@ -46,7 +46,7 @@ enyo.kind({
 						]}
 					]},
 					{className: "accounts-body-text",
-					 content: $L("Allow devices that draw more power than the port normally permits, such as a DualShock 4 controller. Turn on before plugging the device in.")},
+					 content: $L("Allow devices that draw more power than the port normally permits, such as a Playstation 4 controller. Turn on before plugging the device in.")},
 
 					/* --- Connected input devices (live) --- */
 					{kind: "RowGroup", className: "accounts-group", caption: $L("Detected Devices"), components: [
@@ -85,7 +85,7 @@ enyo.kind({
 						]}
 					]},
 					{className: "accounts-body-text",
-					 content: $L("Press a button on a controller to confirm it works — “Input received” lights up while input is arriving. “No input” means the device isn’t responding: reconnect it, or use Reset USB below.")},
+					 content: $L("Press a button on a controller to confirm it works. “No input” means the device isn’t responding: reconnect it, or use Reset USB below.")},
 
 					/* --- USB Storage --- */
 					{kind: "RowGroup", className: "accounts-group", caption: $L("USB Storage"), components: [
