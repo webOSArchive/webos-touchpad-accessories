@@ -1,14 +1,56 @@
 Package: com.webosarchive.usbsettings
-Version: 1.1.8
+Version: 1.1.9
 Section: System
 Architecture: all
-MD5Sum: 5265bd30b0b418a6bc3f4565156adf13
-Size: 87566
-Filename: com.webosarchive.usbsettings_1.1.8_all.ipk
+MD5Sum: e3365d6509b1247b463399d079596177
+Size: 88112
+Filename: com.webosarchive.usbsettings_1.1.9_all.ipk
 Description: USB Settings - toggle USB host (OTG), high-power devices, and USB storage
 Maintainer: webOS Archive
-Source: { "Type":"Application", "Feed":"WOSA Modernize", "Category":"System", "LastUpdated":"1785425720", "Title":"USB Settings", "FullDescription":"A Palm-style settings panel for the USB capabilities the TouchPad's OS hides.<br><br>Toggle <b>USB Host (OTG)</b> mode to use USB keyboards, game controllers and flash drives; enable <b>High-power devices</b> to run gear that draws more current than the port normally allows (such as a DualShock 4 over USB); and <b>mount / unmount USB storage</b> to browse a flash drive. Shows live status and posts a notification when a drive is detected, mounted or removed.<br><br>Includes a <b>troubleshooting panel</b>: a live list of connected accessories with an <b>input received</b> indicator, so you can press a button and see at a glance whether a controller is really responding, plus a <b>Reset USB</b> button that clears a wedged port.<br><br>Self-contained: only uses capabilities and components already on the device, so it needs no other feeds. Adds no drivers, and there is no Bluetooth LE. Fully reversible.<br><br>Install <b>and uninstall via Preware / WebOS Quick Install</b>, then reboot. Do not use the launcher's Delete: it skips the cleanup script and would leave a background daemon running (the app hides its Delete button for this reason).", "MinWebOSVersion":"3.0.0", "MaxWebOSVersion":"3.0.9", "DeviceCompatibility":["TouchPad","Touchpad Go"], "PostInstallFlags":"RestartDevice", "PostUpdateFlags":"RestartDevice", "License":"GPL" }
+Source: { "Type":"Application", "Feed":"WOSA Modernize", "Category":"System", "LastUpdated":"1787602699", "Title":"USB Settings", "FullDescription":"A Palm-style settings panel for the USB capabilities the TouchPad's OS hides.<br><br>Toggle <b>USB Host (OTG)</b> mode to use USB keyboards, game controllers and flash drives; enable <b>High-power devices</b> to run gear that draws more current than the port normally allows (such as a DualShock 4 over USB); and <b>mount / unmount USB storage</b> to browse a flash drive. Shows live status and posts a notification when a drive is detected, mounted or removed.<br><br>Includes a <b>troubleshooting panel</b>: a live list of connected accessories with an <b>input received</b> indicator, so you can press a button and see at a glance whether a controller is really responding, plus a <b>Reset USB</b> button that clears a wedged port.<br><br>Self-contained: only uses capabilities and components already on the device, so it needs no other feeds. Adds no drivers, and there is no Bluetooth LE. Fully reversible.<br><br>Install <b>and uninstall via Preware / WebOS Quick Install</b>, then reboot. Do not use the launcher's Delete: it skips the cleanup script and would leave a background daemon running (the app hides its Delete button for this reason).", "MinWebOSVersion":"3.0.0", "MaxWebOSVersion":"3.1.9", "DeviceCompatibility":["TouchPad","Touchpad Go"], "PostInstallFlags":"RestartDevice", "PostUpdateFlags":"RestartDevice", "License":"GPL" }
 
+
+================================================================================
+1.1.9 release notes  (NOT part of the stanza -- for the changelog / feed post)
+================================================================================
+
+Fixes a USB drive that mounts fine but shows up EMPTY in Internalz Pro.
+
+The stick used to be mounted at /media/internal/usbdrive. That looked like the
+right home -- /media/internal is the writable user partition every file manager
+browses -- but it is the one place the drive cannot be seen from.
+
+Internalz Pro's backend, FileMgr-Service, does not use readdir for anything
+under /media/internal. It shells out to MTOOLS (`mdir` against
+`drive A: file="/dev/mapper/store-media"`) whenever the caller asks to hide
+hidden files, which is Internalz's default. mtools parses the internal
+partition's FAT directly and is blind to the kernel's mount table, so a drive
+mounted at a subdirectory of that volume lists as an empty folder -- while
+writes into it land on internal storage underneath the mountpoint. Verified on
+device: `mdir -f "A:/usbdrive/"` returns only `.` and `..` for a directory that
+demonstrably has files in it.
+
+  * The drive now mounts at /media/usb, outside the media partition, which takes
+    FileMgr's ordinary readdir path. Listing, hidden-file filtering, and
+    read/write/create/delete through the service all verified on webOS 3.0.5 and
+    webOS CE 3.1.0.
+  * Creating that mountpoint needs a writable root fs. The installer already
+    remounts rw, and the daemon falls back to the old in-partition path if the
+    directory cannot be created, so a locked-down device still mounts.
+
+Also raises MaxWebOSVersion to 3.1.9 so the app is offered on webOS CE 3.1.x.
+It was capped at 3.0.9, which excluded the CE builds entirely.
+
+Upgrade note: install over the top and reboot as usual. If a drive is mounted
+when you upgrade, the old /media/internal/usbdrive mount is cleared by the
+post-install reboot. Browse to /media/usb afterwards -- and note webOS's own
+media indexer only scans /media/internal, so photos and music on the stick no
+longer appear in the stock Photos/Music apps.
+
+If the panel shows no drive at all: that is usually not the mount. The TouchPad's
+OTG controller can wedge (dmesg shows "device not accepting address N, error
+-110" and the port drops to low power), and only a controller cycle clears it --
+switch USB Host off, wait a few seconds, switch it back on.
 
 ================================================================================
 1.1.8 release notes  (NOT part of the stanza -- for the changelog / feed post)

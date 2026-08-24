@@ -41,7 +41,43 @@ The daemon does the privileged work and writes status back; the app polls it.
 | `/usr/bin/usbctl-jsservice` | self-contained JS-service launcher (no external framework dep) |
 | `/etc/event.d/usbctl-watchd` | upstart job (auto-start on boot) |
 | `/media/internal/.usbctl-{control,status,state}` | IPC + persisted flags |
-| `/media/internal/usbdrive` | USB flash-drive mountpoint (root fs is read-only, so not `/media`) |
+| `/media/usb` | USB flash-drive mountpoint. Falls back to `/media/internal/usbdrive` if the root fs is read-only and the directory cannot be created |
+
+### Why the mountpoint is not inside `/media/internal`
+
+It used to be `/media/internal/usbdrive`, on the reasoning that the root fs (and
+so `/media`) is read-only on a stock device while `/media/internal` is the
+writable user partition every file manager browses. That backfired.
+
+**Internalz Pro cannot see a drive mounted under `/media/internal`.** Its
+backend, FileMgr-Service, lists any path under that prefix with **mtools** —
+`mdir` against `mtools.conf`'s `drive A: file="/dev/mapper/store-media"` —
+whenever the caller asks to hide hidden files, which is Internalz's default.
+mtools parses the internal partition's FAT directly and is blind to the kernel
+mount table, so a stick mounted at a subdirectory of that volume lists as an
+empty folder. Verified on webOS 3.0.5: `mdir -f "A:/usbdrive/"` returns only
+`.` and `..` while the same directory has files in it.
+
+So we mount at `/media/usb`, which takes FileMgr's plain `readdir` path.
+Confirmed working: listing with hidden-filtering on, plus read/write/create/
+delete through the service. Two things to know:
+
+- Creating `/media/usb` needs a writable root fs (`rootfs_open -w`), which
+  Preware/webOS Internals users have. The daemon falls back to the old
+  in-partition path when `mkdir` fails, so a locked-down device still mounts —
+  it just keeps the Internalz blindness.
+- Don't pick a name like `/media/internal-usb`: FileMgr's test is a bare
+  `startsWith("/media/internal")` with no trailing slash.
+
+Trade-offs of moving out of the media partition: webOS's own file indexer only
+scans `/media/internal`, so photos/music on the stick no longer show up in the
+stock Photos/Music apps, and Internalz opens at `/media/internal/` so the drive
+is no longer one tap away (add a favourite). Also note FileMgr's
+`writePermissable()` whitelist is `/media/cryptofs/apps/`, `/media/internal/`
+and `/var/` — `/media/usb` is not on it, and writes only succeed because of a
+separate bug (`if(appid = "ca.canucksoftware.internalz")`, an assignment, makes
+that check always take the `rootfs_open` branch). If that typo is ever fixed
+upstream, `/media/usb` needs adding to the whitelist.
 
 ## Build
 
