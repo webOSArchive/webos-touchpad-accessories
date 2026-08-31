@@ -24,7 +24,7 @@ The complete working state is six changes (see `DEVICE-STATE.md` #11–16 and th
 | 1 | The shim | `/usr/lib/libpmbtgamepad.so` | no (loads on BT restart) |
 | 2 | LD_PRELOAD the shim into PmBtEngine + `sysrq=0` | `/etc/event.d/bluetooth` (backup `/etc/bluetooth.upstart.btshim-orig`) | **yes** — upstart 0.3.x never re-parses a job at runtime |
 | 3 | Gamepad node → `0666` for jailed apps | `/etc/udev/rules.d/99-bt-gamepad.rules` | no |
-| 4 | Expose `/dev/input` in the PDK jail | `/etc/jail_pdk.conf` (backup `.btshim-orig`) | no (jails rebuild per launch) |
+| 4 | Add gamepad event nodes to the PDK jail (jailer `mknod`, **opal only** as of 1.2.0) | `/etc/jail_pdk.conf` (backup `.btshim-orig`) | no (jailer re-runs setup per launch) |
 | 5 | Let mice/gamepads pair via the keyboard HID path | `com.palm.app.bluetoothtab` `DeviceClass.js` + `bluetooth-assistant.js` (backups `*.btshim-orig`) | no (relaunch the app) |
 | 6 | Per-device: a valid `/var/hid.j` record | `/var/hid.j` | radio cycle |
 
@@ -136,11 +136,12 @@ For a distributable, widen coverage:
    custom feed) + a GitHub Release with the raw `.ipk` for WebOS Quick Install.
 
 **Stretch (polish):**
-8. Replace the global `jail_pdk.conf` edit (exposes *all* input to *every* PDK app)
-   with something tighter — ideally a per-app opt-in, or exposing only the gamepad
-   node. Investigate whether a per-app `jail_app.conf` (the jailer already looks for
-   `<appdir>/jail_app.conf` — it logged "not found") can add the bind-mount for just
-   the game, so system-wide exposure isn't required.
+8. Tighten the global `jail_pdk.conf` edit further. 1.2.0 already narrowed it from a
+   bind mount of the whole directory to `mknod` of `event3`–`event9` only (the system
+   buttons at `event0`–`event2` are no longer exposed), but every PDK app still gets
+   the nodes. A per-app `jail_app.conf` (jailer already looks for `<appdir>/jail_app.conf`
+   — it logs "not found") would let a game opt in on its own, so system-wide exposure
+   isn't required.
 9. A tiny root helper to auto-seed `hid.j` / drive pairing so the user doesn't touch
    the Bluetooth settings app at all.
 10. Fold the shim fixes upstream into Herrie's repo so the package tracks upstream.

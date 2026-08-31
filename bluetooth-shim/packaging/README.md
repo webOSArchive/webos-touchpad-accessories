@@ -6,9 +6,15 @@ needs) into one installable `.ipk` for the **WOSA Modernize** feed.
 ## Build
 
 ```sh
-./build-ipk.sh [version]        # default 1.0.0
-# -> org.webosarchive.btgamepad_<version>_armv7.ipk
+./build-ipk.sh [version] [--go]   # default 1.2.0
+# -> org.webosarchive.btgamepad_<version>_armv7.ipk        (both devices)
+# -> org.webosarchive.btgamepad_<version>_armv7-go.ipk     (--go: TouchPad Go only)
 ```
+`--go` keeps the same `Package:` name — so Preware treats it as an upgrade of an
+installed 1.1.0 — but narrows `DeviceCompatibility` to `["Touchpad Go"]` so only
+a Go is offered it. The postinst gates the jail-config change on
+`machineName == opal` independently, so the build flag only controls what the
+feed advertises.
 Builds the shim (`make` in the parent) if needed, assembles the ipk
 (`debian-binary` + `control.tar.gz` + `data.tar.gz`, in that ar member order),
 and prints the md5/size. Regenerate `Packages-stanza.txt` after any rebuild —
@@ -18,7 +24,18 @@ the md5 changes because `LastUpdated` is stamped at build time.
 
 1. installs `/usr/lib/libpmbtgamepad.so`
 2. installs `/etc/udev/rules.d/99-bt-gamepad.rules` (pad node → 0666 for jailed apps)
-3. bind-mounts `/dev/input` into the PDK jail (`/etc/jail_pdk.conf`)
+3. adds the gamepad event nodes to the PDK jail (`/etc/jail_pdk.conf`) — **opal
+   (TouchPad Go) only**; on any other machine the file is left exactly as found.
+   The block spliced in is `jail-input-block.conf`: jailer `mknod` verbs that
+   create `/dev/input/event3`–`event9` (char 13:67–13:73, chmod 666) *inside*
+   the jail.
+
+   1.1.0 did this with `mount ro /dev/input`, which is a genuine **bind mount**
+   of the host's `/dev/input`. That blacks out PDK games on the Go, and while it
+   is mounted anything that deletes the jail directory deletes the device's real
+   input nodes. See `../docs/PDK-GRAPHICS-REGRESSION.md`. postinst also unmounts
+   any such leftover mount and recreates input nodes a 1.1.0 teardown deleted —
+   both on every machine, since neither is a config change.
 4. patches the Bluetooth settings app (`models/Bluetooth.js` + `controllers/bluetooth-assistant.js`)
    so a gamepad paired from the **Other** category HID-connects (auto after
    pairing, on tap-to-reconnect, and device-initiated) — three edits that add
@@ -36,6 +53,22 @@ postinst does **not** reboot. The control's `Source` JSON carries
 `"PostInstallFlags":"RestartDevice"` (and `PostUpdateFlags`), so Preware performs
 the reboot and can **stack** it with other packages in the same batch. The
 upstart-job change (step 5) only takes effect after that reboot.
+
+## Do NOT install this with `palm-install`
+
+`palm-install` (and the `ApplicationInstallerUtility` path behind it) runs
+`ipkg -o /media/cryptofs/apps … install`, i.e. **offline-root mode, which does not
+run a Debian `postinst`** — it extracts the payload, registers the package, and
+defers. It then looks for a Palm-convention `pmPostInstall.script`, does not find
+one in a Preware-style ipk, writes a **0-byte** file and runs that, logging
+`result = 1`. The install looks like it succeeded and applies nothing.
+
+Confirmed on the Go 2026-08-31. Preware and WOSQI use a path that does run
+`postinst`. To finish a `palm-install` by hand, run the extracted script:
+
+```sh
+sh /media/cryptofs/apps/usr/lib/ipkg/info/org.webosarchive.btgamepad.postinst
+```
 
 ## Install (WOSQI, manual)
 
@@ -60,6 +93,19 @@ Bluetooth settings → Add device, put the pad in pairing mode, pair it from the
   three apply once, line counts unchanged, guards are idempotent; both patched
   files pass `node --check`.
 - Source JSON parses (Preware-style `JSON.parse`).
+- **1.2.0 (2026-08-31, TouchPad Go):** `jailer`'s `mknod` verb confirmed working on
+  hardware — a jail built with the new config gets `crw-rw-rw- 13,67…13,73` nodes,
+  the jail's mount count is unchanged at 20, and the host's `/dev/input` survives
+  both jail creation and `jailer -N` teardown. The postinst rewrite chain was
+  unit-tested under the device's own busybox across five cases (fresh, upgrade
+  with/without backup, re-run, and a backup captured from a patched file) — all
+  produce a file identical to stock once the marker block is removed.
+  **Installed on the Go and confirmed by the device owner: `Snes9x EX` and
+  `Flight Control` both draw again.** The jail they build has 20 mounts (identical
+  to stock), zero `/dev/input` mounts, `event3`–`event9` inside it, and leaves the
+  host's `/dev/input` untouched. **The gamepad half is confirmed too:** a DS4 paired
+  fresh, the shim's uinput node landed at `event3` (13:67) — the first minor the
+  block creates — and pad input in a jailed game was confirmed by the device owner.
 - **Confirmed on hardware (2026-07-28):** clean WOSQI install on a fresh device →
   reboot → pair a DS4 from the "Other" category → auto-connects as a gamepad, no
   radio cycle. Also verified: press-PS reconnect of a bonded pad, and play in

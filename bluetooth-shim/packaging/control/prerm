@@ -12,11 +12,20 @@ rm -f /usr/lib/libpmbtgamepad.so
 rm -f /etc/udev/rules.d/99-bt-gamepad.rules
 /sbin/udevcontrol reload_rules 2>/dev/null || true
 
-# restore the PDK jail
+# drop any live 1.1.0 bind mount before touching the jail config -- while one is
+# mounted, deleting the jail directory deletes the host's real input nodes
+grep " /var/palm/jail/[^ ]*/dev/input " /proc/mounts 2>/dev/null | cut -d' ' -f2 | while read -r M; do
+    umount "$M" 2>/dev/null
+done
+
+# restore the PDK jail config
 if [ -f /etc/jail_pdk.conf.btshim-orig ]; then
     mv -f /etc/jail_pdk.conf.btshim-orig /etc/jail_pdk.conf
 else
-    sed -i '/^mkdir \/dev\/input$/d; /^mount ro \/dev\/input$/d' /etc/jail_pdk.conf
+    # no backup: strip everything either 1.1.x version could have added
+    sed -i -e '/^# >>> btgamepad begin/,/^# <<< btgamepad end/d' \
+           -e '/^mkdir \/dev\/input$/d' \
+           -e '/^mount ro \/dev\/input$/d' /etc/jail_pdk.conf
 fi
 
 # restore the Bluetooth settings app (model + assistant)

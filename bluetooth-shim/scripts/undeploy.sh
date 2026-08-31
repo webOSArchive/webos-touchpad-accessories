@@ -15,8 +15,11 @@ dev_sh() { $NOVACOM run file://bin/sh; }
   echo '[ -f /usr/bin/PmBtEngine.real ] && mv -f /usr/bin/PmBtEngine.real /usr/bin/PmBtEngine && echo bin-restored || true'
   echo 'rm -f /usr/lib/libpmbtgamepad.so && echo shim-removed'
   echo "rm -f $UDEV && echo udev-rule-removed"
-  # restore the stock PDK jail (or strip our two lines if no backup)
-  echo 'if [ -f /etc/jail_pdk.conf.btshim-orig ]; then mv -f /etc/jail_pdk.conf.btshim-orig /etc/jail_pdk.conf && echo jail-restored; else sed -i "/^mkdir \/dev\/input$/d; /^mount ro \/dev\/input$/d" /etc/jail_pdk.conf && echo jail-lines-stripped; fi'
+  # drop any live 1.1.0 bind mount BEFORE touching the jail -- while one is
+  # mounted, deleting the jail directory deletes the host's real input nodes
+  echo 'grep " /var/palm/jail/[^ ]*/dev/input " /proc/mounts 2>/dev/null | cut -d" " -f2 | while read -r M; do umount "$M" 2>/dev/null && echo "unmounted stale $M"; done'
+  # restore the stock PDK jail (or strip our lines if there is no backup)
+  echo 'if [ -f /etc/jail_pdk.conf.btshim-orig ]; then mv -f /etc/jail_pdk.conf.btshim-orig /etc/jail_pdk.conf && echo jail-restored; else sed -i -e "/^# >>> btgamepad begin/,/^# <<< btgamepad end/d" -e "/^mkdir \/dev\/input$/d" -e "/^mount ro \/dev\/input$/d" /etc/jail_pdk.conf && echo jail-lines-stripped; fi'
   echo 'kill -HUP 1 2>/dev/null; killall PmBtEngine 2>/dev/null; killall BluetoothMonitor 2>/dev/null; echo bt-restarted'
 } | dev_sh
 echo ">> reverted."

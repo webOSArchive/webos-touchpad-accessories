@@ -3,6 +3,11 @@
 # Runs as root under ipkg/Preware. Idempotent and reversible (see prerm).
 # NOTE: does NOT reboot -- the reboot is declared in the package control's
 # Source JSON (PostInstallFlags:RestartDevice) so Preware can stack reboots.
+#
+# 1.2.0 is the TouchPad Go (opal) build. It differs from 1.1.0 in ONE place:
+# how the gamepad is exposed inside the PDK app jail (step 3). Everything else
+# is unchanged. On any machine that is not opal it deliberately leaves
+# /etc/jail_pdk.conf exactly as it found it.
 PID="org.webosarchive.btgamepad"
 [ -z "$IPKG_OFFLINE_ROOT" ] && IPKG_OFFLINE_ROOT=/media/cryptofs/apps
 mount -o remount,rw / 2>/dev/null || true
@@ -18,16 +23,84 @@ done
 cp -f "$SRC/libpmbtgamepad.so" /usr/lib/libpmbtgamepad.so
 chmod 644 /usr/lib/libpmbtgamepad.so
 
-# 2. udev rule: make the gamepad node 0666 so jailed (uid 5003) apps can read it
+# 2. udev rule: make the gamepad node 0666 so unjailed apps can read it
 cp -f "$SRC/99-bt-gamepad.rules" /etc/udev/rules.d/99-bt-gamepad.rules
 chmod 644 /etc/udev/rules.d/99-bt-gamepad.rules
 /sbin/udevcontrol reload_rules 2>/dev/null || true
 
-# 3. expose /dev/input inside the PDK app jail (idempotent; backup once)
-if ! grep -q "mount ro /dev/input" /etc/jail_pdk.conf; then
-    [ -f /etc/jail_pdk.conf.btshim-orig ] || cp /etc/jail_pdk.conf /etc/jail_pdk.conf.btshim-orig
-    awk '{print} /^mkdir \/dev$/ && !d {print "mkdir /dev/input"; print "mount ro /dev/input"; d=1}' \
-        /etc/jail_pdk.conf > /tmp/jpk.$$ && cp /tmp/jpk.$$ /etc/jail_pdk.conf && rm -f /tmp/jpk.$$
+# 3. expose the gamepad inside the PDK app jail.
+#
+#    1.1.0 did this with "mount ro /dev/input", which is a genuine bind mount of
+#    the host's /dev/input into the jail. On the Go that blacks out PDK games
+#    (see docs/PDK-GRAPHICS-REGRESSION.md), and while it is mounted anything
+#    that deletes the jail directory deletes the device's real input nodes.
+#
+#    1.2.0 uses jailer's mknod verb instead: the event nodes are created inside
+#    the jail, no mount is involved, and the host is never referenced.
+JPK=/etc/jail_pdk.conf
+JPKORIG=$JPK.btshim-orig
+MACHINE=$(cat /etc/prefs/properties/machineName 2>/dev/null)
+
+# 3a. Drop any live 1.1.0 bind mount, on every machine. This is pure hazard
+#     removal, not a config change: while one of these is mounted, an app
+#     uninstall or a stray rm -rf of the jail wipes /dev/input on the host.
+grep " /var/palm/jail/[^ ]*/dev/input " /proc/mounts 2>/dev/null | cut -d' ' -f2 | while read -r M; do
+    umount "$M" 2>/dev/null && echo "btgamepad: unmounted stale jail bind mount $M"
+done
+
+# 3b. Repair input nodes a 1.1.0 jail teardown already deleted. No-op on a
+#     healthy device. (A reboot repairs this too, via udev coldplug, but the
+#     buttons should not stay dead between installing and rebooting.)
+if [ -d /dev/input ]; then
+    chown 0:0 /dev/input 2>/dev/null || true
+    chmod 755 /dev/input 2>/dev/null || true
+    for D in /sys/class/input/event*; do
+        [ -f "$D/dev" ] || continue
+        N=${D##*/}
+        [ -e "/dev/input/$N" ] && continue
+        MAJ=$(cut -d: -f1 "$D/dev"); MIN=$(cut -d: -f2 "$D/dev")
+        mknod "/dev/input/$N" c "$MAJ" "$MIN" 2>/dev/null && \
+            chown 0:0 "/dev/input/$N" && chmod 640 "/dev/input/$N" && \
+            echo "btgamepad: recreated deleted input node /dev/input/$N ($MAJ:$MIN)"
+    done
+fi
+
+# 3c. Rewrite the jail config -- opal only.
+if [ "$MACHINE" = "opal" ] && [ -f "$JPK" ]; then
+    # Establish a known-stock backup. 1.1.0 made one; if it is missing, derive
+    # one by stripping every line either version could have added.
+    if [ ! -f "$JPKORIG" ]; then
+        sed -e '/^# >>> btgamepad begin/,/^# <<< btgamepad end/d' \
+            -e '/^mkdir \/dev\/input$/d' \
+            -e '/^mount ro \/dev\/input$/d' "$JPK" > "$JPKORIG"
+    fi
+    # Regenerate from stock every time: idempotent, and it migrates a 1.1.0
+    # install by construction -- the bad "mount ro /dev/input" simply is not in
+    # the stock file we build from. Strip the markers from the source too, in
+    # case an older backup was itself captured from a patched file.
+    sed -e '/^# >>> btgamepad begin/,/^# <<< btgamepad end/d' \
+        -e '/^mkdir \/dev\/input$/d' \
+        -e '/^mount ro \/dev\/input$/d' "$JPKORIG" > "/tmp/btgp-src.$$"
+    awk -v blk="$SRC/jail-input-block.conf" '
+        { print }
+        /^mkdir \/dev$/ && !d { while ((getline l < blk) > 0) print l; d = 1 }
+    ' "/tmp/btgp-src.$$" > "/tmp/btgp-jpk.$$"
+    # Only install it if the splice actually produced what we expect. If it did
+    # not, still install the stripped file: that loses gamepad-in-jail, but it
+    # gets 1.1.0's `mount ro /dev/input` off the device, which is the part that
+    # breaks games. Leaving the old config in place is the one bad outcome.
+    if grep -q '^mknod /dev/input/event3 c 13 67$' "/tmp/btgp-jpk.$$"; then
+        cp "/tmp/btgp-jpk.$$" "$JPK"
+        echo "btgamepad: PDK jail config updated (mknod gamepad nodes, no bind mount)"
+    else
+        cp "/tmp/btgp-src.$$" "$JPK"
+        echo "btgamepad: WARNING: could not splice $SRC/jail-input-block.conf --"
+        echo "btgamepad: reverted $JPK to stock instead. PDK games will work;"
+        echo "btgamepad: gamepads will not reach jailed PDK apps."
+    fi
+    rm -f "/tmp/btgp-src.$$" "/tmp/btgp-jpk.$$"
+else
+    echo "btgamepad: machine '$MACHINE' is not opal -- leaving $JPK untouched"
 fi
 
 # 4. Teach the Bluetooth settings app to CONNECT gamepads/mice over HID.

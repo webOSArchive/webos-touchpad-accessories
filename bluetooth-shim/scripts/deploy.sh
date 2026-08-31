@@ -23,6 +23,7 @@ set -euo pipefail
 NOVACOM="${NOVACOM:-novacom}"
 SO_LOCAL="${SO_LOCAL:-libpmbtgamepad.so}"
 SO_REMOTE=/usr/lib/libpmbtgamepad.so
+JAILBLOCK="${JAILBLOCK:-$(dirname "$0")/../packaging/jail-input-block.conf}"
 JOB=/etc/event.d/bluetooth
 # NEVER store the backup inside /etc/event.d -- upstart treats every file there
 # as a job, so a backup copy would race the real one at boot (learned the hard
@@ -53,17 +54,32 @@ if [ "$SETUP" = 1 ]; then
     echo 'UDEVEOF'
     echo '/sbin/udevcontrol reload_rules 2>/dev/null; echo udev-rule-installed'
   } | dev_sh
-  echo ">> exposing /dev/input inside the PDK app jail (so games can read the pad)"
+  echo ">> exposing the gamepad inside the PDK app jail (so games can read the pad)"
   # Launcher-started PDK apps run in a jail whose /dev is a copynod whitelist
-  # with no /dev/input. Bind-mount it in so the shim's gamepad node is visible.
-  # Idempotent; backs up the stock jail_pdk.conf once. Takes effect on next app
-  # launch (jails are rebuilt per-launch; no reboot).
+  # with no /dev/input. We add the event nodes with jailer's `mknod` verb, which
+  # creates them INSIDE the jail -- no mount, nothing on the host referenced.
+  #
+  # Do NOT go back to `mount ro /dev/input`: that is a real bind mount of the
+  # host's /dev/input, it blacks out PDK games on the Go, and while it is live
+  # anything that deletes the jail dir deletes the device's real input nodes.
+  # See docs/PDK-GRAPHICS-REGRESSION.md.
+  #
+  # Idempotent: always regenerated from the stock backup. Takes effect on the
+  # next app launch (jailer re-runs setup per launch; no reboot).
+  $NOVACOM put file:///tmp/jail-input-block.conf < "$JAILBLOCK"
   {
     echo 'mount -o remount,rw / >/dev/null 2>&1'
-    echo 'if grep -q "mount ro /dev/input" /etc/jail_pdk.conf; then echo jail-already-patched; else'
-    echo '  [ -f /etc/jail_pdk.conf.btshim-orig ] || cp /etc/jail_pdk.conf /etc/jail_pdk.conf.btshim-orig'
-    echo '  awk '"'"'{print} /^mkdir \/dev$/ && !d {print "mkdir /dev/input"; print "mount ro /dev/input"; d=1}'"'"' /etc/jail_pdk.conf > /tmp/jpk.$$ && cp /tmp/jpk.$$ /etc/jail_pdk.conf && rm -f /tmp/jpk.$$ && echo jail-patched'
-    echo 'fi'
+    echo 'JPK=/etc/jail_pdk.conf; JPKORIG=$JPK.btshim-orig'
+    # strip anything either shim version could have added, so we always start
+    # from a genuinely stock file
+    echo 'strip_btshim() { sed -e "/^# >>> btgamepad begin/,/^# <<< btgamepad end/d" -e "/^mkdir \/dev\/input$/d" -e "/^mount ro \/dev\/input$/d" "$1"; }'
+    echo '[ -f "$JPKORIG" ] || strip_btshim "$JPK" > "$JPKORIG"'
+    echo 'strip_btshim "$JPKORIG" > /tmp/jpk-src.$$'
+    echo 'awk -v blk=/tmp/jail-input-block.conf '"'"'{print} /^mkdir \/dev$/ && !d {while ((getline l < blk) > 0) print l; d=1}'"'"' /tmp/jpk-src.$$ > /tmp/jpk.$$'
+    echo 'if grep -q "^mknod /dev/input/event3 c 13 67$" /tmp/jpk.$$; then cp /tmp/jpk.$$ "$JPK"; echo jail-patched; else echo JAIL-PATCH-FAILED; fi'
+    echo 'rm -f /tmp/jpk-src.$$ /tmp/jpk.$$'
+    # drop any live bind mount left over from the old approach
+    echo 'grep " /var/palm/jail/[^ ]*/dev/input " /proc/mounts 2>/dev/null | cut -d" " -f2 | while read -r M; do umount "$M" 2>/dev/null && echo "unmounted stale $M"; done'
   } | dev_sh
   echo ">> (re)writing upstart job (backup -> $BAK)"
   {
