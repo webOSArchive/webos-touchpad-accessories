@@ -4,9 +4,16 @@
 # NOTE: does NOT reboot -- the reboot is declared in the package control's
 # Source JSON (PostInstallFlags:RestartDevice) so Preware can stack reboots.
 #
-# 1.2.0 is the TouchPad Go (opal) build. It differs from 1.1.0 in ONE place:
+# 1.2.0 is the TouchPad Go build. The gate reads
+# /etc/prefs/properties/machineName -- the same file jailer reads to pick its
+# jail_device.conf branch. Verified on hardware: that is "opal" on the Go and
+# "topaz" on the TouchPad. "shortloin" is accepted as a belt-and-braces alias,
+# but be aware it is the KERNEL name (uname -r = 2.6.35-palm-shortloin), not a
+# machineName any known unit reports -- and jail_device.conf has no branch for
+# it, so a device that did report it could not run PDK games at all. Do not go
+# hunting for such a unit. It differs from 1.1.0 in ONE place:
 # how the gamepad is exposed inside the PDK app jail (step 3). Everything else
-# is unchanged. On any machine that is not opal it deliberately leaves
+# is unchanged. On any other machine it deliberately leaves
 # /etc/jail_pdk.conf exactly as it found it.
 PID="org.webosarchive.btgamepad"
 [ -z "$IPKG_OFFLINE_ROOT" ] && IPKG_OFFLINE_ROOT=/media/cryptofs/apps
@@ -65,8 +72,18 @@ if [ -d /dev/input ]; then
     done
 fi
 
-# 3c. Rewrite the jail config -- opal only.
-if [ "$MACHINE" = "opal" ] && [ -f "$JPK" ]; then
+# 3c. Rewrite the jail config -- TouchPad Go only.
+case "$MACHINE" in
+    opal|shortloin) IS_GO=1 ;;
+    *)              IS_GO=0 ;;
+esac
+
+if [ "$IS_GO" = 0 ]; then
+    echo "btgamepad: machine '$MACHINE' is not a TouchPad Go (opal/shortloin) --"
+    echo "btgamepad: leaving $JPK untouched"
+elif [ ! -f "$JPK" ]; then
+    echo "btgamepad: $JPK is not present -- nothing to do"
+else
     # Establish a known-stock backup. 1.1.0 made one; if it is missing, derive
     # one by stripping every line either version could have added.
     if [ ! -f "$JPKORIG" ]; then
@@ -99,8 +116,6 @@ if [ "$MACHINE" = "opal" ] && [ -f "$JPK" ]; then
         echo "btgamepad: gamepads will not reach jailed PDK apps."
     fi
     rm -f "/tmp/btgp-src.$$" "/tmp/btgp-jpk.$$"
-else
-    echo "btgamepad: machine '$MACHINE' is not opal -- leaving $JPK untouched"
 fi
 
 # 4. Teach the Bluetooth settings app to CONNECT gamepads/mice over HID.

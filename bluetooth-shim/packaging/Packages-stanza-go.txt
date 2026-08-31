@@ -2,8 +2,8 @@ Package: org.webosarchive.btgamepad
 Version: 1.2.0
 Section: System
 Architecture: armv7
-MD5Sum: 8a359937d7d0f5b42673a8b048516660
-Size: 19992
+MD5Sum: 8c637397294cf505445a85a9f40498df
+Size: 20150
 Filename: org.webosarchive.btgamepad_1.2.0_armv7-go.ipk
 Description: Bluetooth game controller support for the HP TouchPad Go
 Maintainer: webOS Archive

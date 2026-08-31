@@ -4,7 +4,10 @@
 findings revised, fix built, installed on the Go and verified by the device owner the same day.
 **Verdict:** the regression is **ours — `bluetooth-shim` 1.1.0**. Not the TLS updates
 (`OpenSSL-legacyWebOS`), not LunaCE, not `usb-settings`.
-**Fix:** shipped as `org.webosarchive.btgamepad` **1.2.0**, TouchPad Go only.
+**Fix:** shipped as `org.webosarchive.btgamepad` **1.2.0**, TouchPad Go only. Verified end to end
+through a real **Preware upgrade over 1.1.0** on the Go (2026-08-31): the device was deliberately
+reverted to a genuine 1.1.0 state — registry, payload, control scripts and the bind-mounted
+`jail_pdk.conf` — and the feed upgrade repaired it. No uninstall required.
 
 ---
 

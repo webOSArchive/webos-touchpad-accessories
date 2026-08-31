@@ -83,6 +83,47 @@ Bluetooth settings → Add device, put the pad in pairing mode, pair it from the
 2. append `Packages-stanza.txt` to `ipkgs/Packages` (keep existing stanzas verbatim)
 3. regenerate `Packages.gz` (`gzip -n`, mtime 0) and `cmp` it against `Packages`
 
+### If the shipped artifact was not built by this script
+
+`MD5Sum` and `Size` change on **every** build — `LastUpdated` is stamped at build
+time — so you cannot refresh a stanza by rebuilding: you would get a stanza
+describing a file nobody has, and Preware rejects the download on hash mismatch.
+When the artifact that actually ships is a repack or otherwise came from
+elsewhere, generate the stanza *from that file*:
+
+```sh
+./build-ipk.sh --stanza-from ../../ipks/org.webosarchive.btgamepad_1.2.0_armv7-go.ipk
+```
+
+It reads the `control` back out of the ipk and hashes the real file. The output
+filename (`Packages-stanza.txt` vs `-go.txt`) is picked from the ipk's own
+`DeviceCompatibility`.
+
+## 1.2.0 as shipped vs this tree
+
+The 1.2.0 that shipped was **repacked by the feed tooling**, and `ipks/` holds
+that exact artifact (md5 `8c637397…`, 20150 B) rather than a local build. Its
+payload, `control` and `prerm` are byte-identical to a build from this tree; its
+`postinst` carries two changes, both folded back into `control/postinst` here:
+
+- **the device gate was restructured** — `machineName` not being a Go is now
+  reported separately from `jail_pdk.conf` being absent. This tree's original
+  collapsed both into one `else` and would print "machine 'opal' is not opal"
+  when the config was simply missing. The repack is correct; adopted.
+- **`shortloin` accepted alongside `opal`.** Kept (it is harmless and does not
+  weaken the topaz protection — verified across `opal`/`shortloin`/`topaz`/empty/
+  unknown), but the shipped comment justifying it is **wrong** and is corrected
+  here: `machineName` on the Go is `opal`. `shortloin` is the *kernel* name
+  (`uname -r` = `2.6.35-palm-shortloin`), exactly as the TouchPad's kernel is
+  `palm-tenderloin` while its `machineName` is `topaz`. No stock
+  `jail_device.conf` has a `shortloin` branch, so a unit reporting it would fall
+  through to that file's own `ERROR: no device-specific setting` and get no
+  kgsl/pmem/fb1 nodes — PDK games would be broken there for unrelated reasons.
+
+So `control/postinst` in this tree differs from the shipped one **in comments
+only**; the executable code is identical (verified by diffing both with comments
+and blank lines stripped).
+
 ## Validated
 
 - ipk structure (ar members, tar roots) — correct.
